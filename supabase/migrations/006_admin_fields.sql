@@ -1,0 +1,2 @@
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS admin_note TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS mt_account_link TEXT;
