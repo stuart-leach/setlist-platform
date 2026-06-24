@@ -63,6 +63,8 @@ export interface Database {
           locked: boolean;
           org_id: string | null;
           channel_type: string;
+          mt_setlist_id: number | null;
+          mt_setlist_date: string | null;
         };
         Insert: {
           id?: string;
@@ -75,6 +77,8 @@ export interface Database {
           locked?: boolean;
           org_id?: string | null;
           channel_type?: string;
+          mt_setlist_id?: number | null;
+          mt_setlist_date?: string | null;
         };
         Update: {
           name?: string;
@@ -85,12 +89,14 @@ export interface Database {
           locked?: boolean;
           org_id?: string | null;
           channel_type?: string;
+          mt_setlist_id?: number | null;
+          mt_setlist_date?: string | null;
         };
       };
       community_settings: {
-        Row: { id: boolean; role_channels_enabled: boolean; updated_at: string; };
-        Insert: { id?: boolean; role_channels_enabled?: boolean; updated_at?: string; };
-        Update: { role_channels_enabled?: boolean; updated_at?: string; };
+        Row: { id: boolean; role_channels_enabled: boolean; setlists_last_synced_at: string | null; updated_at: string; };
+        Insert: { id?: boolean; role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
+        Update: { role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
       };
       community_roles: {
         Row: { id: string; user_id: string; role: string; created_at: string; };

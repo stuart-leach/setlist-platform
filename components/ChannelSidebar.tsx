@@ -113,8 +113,15 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
 
   const [orderedGeneral, setOrderedGeneral] = useState<Channel[]>(rawGeneral);
   const [orderedRole, setOrderedRole] = useState<Channel[]>(rawRole);
-  // Setlists are shown newest-first; no manual reordering.
-  const setlists = [...rawSetlist].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  // Synced setlists sort by service date (soonest first); manual ones (no date)
+  // fall to the bottom, newest-created first. No manual reordering.
+  const setlists = [...rawSetlist].sort((a, b) => {
+    const da = a.mt_setlist_date, db = b.mt_setlist_date;
+    if (da && db) return da.localeCompare(db);
+    if (da) return -1;
+    if (db) return 1;
+    return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+  });
   const canManageSetlists = canModerate && !isPreview;
   const [savedOrder, setSavedOrder] = useState<{ general_order: string[]; role_order: string[] }>({
     general_order: [],

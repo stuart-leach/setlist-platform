@@ -14,6 +14,7 @@ interface Props {
   flags: any[];
   allUsers: any[];
   roleChannelsEnabled: boolean;
+  setlistsLastSyncedAt: string | null;
 }
 
 const PLATFORM_ROLES = [
@@ -74,11 +75,34 @@ const btnJump: React.CSSProperties = { ...btnBase, background: ADMIN_RED_DIM, co
 
 const mutedTextStyle: React.CSSProperties = { color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 24 };
 
-export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers, roleChannelsEnabled }: Props) {
+export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers, roleChannelsEnabled, setlistsLastSyncedAt }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("people");
   const [roleChannelsOn, setRoleChannelsOn] = useState<boolean>(roleChannelsEnabled);
   const [savingSetting, setSavingSetting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [lastSynced, setLastSynced] = useState<string | null>(setlistsLastSyncedAt);
+
+  async function syncSetlists() {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch("/api/setlists/sync", { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        setSyncMsg(body.error || "Sync failed.");
+      } else {
+        setSyncMsg(`Synced ${body.total} setlist${body.total === 1 ? "" : "s"} — ${body.created} new, ${body.updated} updated.`);
+        setLastSynced(new Date().toISOString());
+        router.refresh();
+      }
+    } catch {
+      setSyncMsg("Sync failed — could not reach the server.");
+    } finally {
+      setSyncing(false);
+    }
+  }
   const [localAppeals, setLocalAppeals] = useState<any[]>(appeals);
   const [localBanned, setLocalBanned] = useState<any[]>(bannedUsers);
   const [localMuted, setLocalMuted] = useState<any[]>(mutedUsers);
@@ -688,6 +712,53 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
                       transition: "left 0.15s",
                     }}
                   />
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 16,
+                  padding: "16px 18px",
+                  marginTop: 14,
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
+                    Setlists from MultiTracks
+                  </p>
+                  <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
+                    Pull upcoming setlists from your MultiTracks account and create a chat for each one.
+                    Runs automatically once a day; use this button to sync now.
+                  </p>
+                  {lastSynced && (
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+                      Last synced {timeAgo(lastSynced)}
+                    </p>
+                  )}
+                  {syncMsg && (
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: syncMsg.startsWith("Synced") ? "#34c759" : ADMIN_RED }}>
+                      {syncMsg}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={syncSetlists}
+                  disabled={syncing}
+                  style={{
+                    ...btnNeutral,
+                    flexShrink: 0,
+                    marginTop: 2,
+                    padding: "7px 14px",
+                    cursor: syncing ? "default" : "pointer",
+                    opacity: syncing ? 0.6 : 1,
+                  }}
+                >
+                  {syncing ? "Syncing…" : "Sync now"}
                 </button>
               </div>
             </div>
