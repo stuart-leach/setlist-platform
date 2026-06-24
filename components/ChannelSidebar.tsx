@@ -11,27 +11,9 @@ import UserProfileModal from "./UserProfileModal";
 import OrgSwitcher from "./OrgSwitcher";
 import { createClient } from "@/lib/supabase/client";
 
-const ROLE_OPTIONS = [
-  { value: "worship_leader",      label: "Worship Leaders" },
-  { value: "band_member",         label: "Band Members" },
-  { value: "vocalist",            label: "Vocalists" },
-  { value: "music_director",      label: "Music Directors" },
-  { value: "production_director", label: "Production Directors" },
-];
-
 function toSlug(name: string) {
   return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-");
 }
-
-interface NewChannelForm {
-  name: string;
-  slug: string;
-  description: string;
-  required_roles: string[];
-  locked: boolean;
-}
-
-const BLANK_CHANNEL: NewChannelForm = { name: "", slug: "", description: "", required_roles: [], locked: false };
 
 interface Props {
   channels: Channel[];
@@ -40,6 +22,7 @@ interface Props {
   dmThreadIds: Record<string, string>;
   userCommunityRoles: string[];
   orgs: Organization[];
+  roleChannelsEnabled: boolean;
   collapsed: boolean;
   onCollapse: () => void;
   onExpand: () => void;
@@ -55,14 +38,15 @@ function applyOrder(channels: Channel[], order: string[]): Channel[] {
   });
 }
 
-export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, collapsed, onCollapse, onExpand }: Props) {
+export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, collapsed, onCollapse, onExpand }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
   const [showNewDm, setShowNewDm] = useState(false);
-  const [showNewChannel, setShowNewChannel] = useState(false);
-  const [newChannelForm, setNewChannelForm] = useState<NewChannelForm>(BLANK_CHANNEL);
-  const [newChannelError, setNewChannelError] = useState("");
+  const [showNewSetlist, setShowNewSetlist] = useState(false);
+  const [newSetlistName, setNewSetlistName] = useState("");
+  const [newSetlistError, setNewSetlistError] = useState("");
+  const [savingSetlist, setSavingSetlist] = useState(false);
   const [showNewOrg, setShowNewOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgSlug, setNewOrgSlug] = useState("");
@@ -118,13 +102,20 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   }, [isAdmin, isPreview]);
 
   // ── Channel ordering ────────────────────────────────────────────────────────
-  const rawGeneral = channels.filter((ch) => !ch.required_role?.length);
+  // Treat a missing channel_type (pre-migration data) as "general", and exclude
+  // "system" channels (e.g. #rules) from every sidebar section.
+  const typeOf = (ch: Channel) => ch.channel_type ?? (ch.required_role?.length ? "role" : "general");
+  const rawGeneral = channels.filter((ch) => typeOf(ch) === "general");
+  const rawSetlist = channels.filter((ch) => typeOf(ch) === "setlist");
   const rawRole = channels.filter(
-    (ch) => ch.required_role?.length && ch.required_role.some((r) => userCommunityRoles.includes(r))
+    (ch) => typeOf(ch) === "role" && ch.required_role?.length && ch.required_role.some((r) => userCommunityRoles.includes(r))
   );
 
   const [orderedGeneral, setOrderedGeneral] = useState<Channel[]>(rawGeneral);
   const [orderedRole, setOrderedRole] = useState<Channel[]>(rawRole);
+  // Setlists are shown newest-first; no manual reordering.
+  const setlists = [...rawSetlist].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  const canManageSetlists = canModerate && !isPreview;
   const [savedOrder, setSavedOrder] = useState<{ general_order: string[]; role_order: string[] }>({
     general_order: [],
     role_order: [],
@@ -169,9 +160,9 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   // Keep channel ID→slug lookup in sync for realtime handler
   useEffect(() => {
     const map = new Map<string, string>();
-    [...orderedGeneral, ...orderedRole].forEach((ch) => map.set(ch.id, ch.slug));
+    [...orderedGeneral, ...setlists, ...orderedRole].forEach((ch) => map.set(ch.id, ch.slug));
     channelIdToSlugRef.current = map;
-  }, [orderedGeneral, orderedRole]);
+  }, [orderedGeneral, orderedRole, channels]);
 
   // Keep current-slug ref in sync (used inside closure)
   useEffect(() => { currentSlugRef.current = currentSlug; }, [currentSlug]);
@@ -336,25 +327,31 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     router.refresh();
   }
 
-  async function saveNewChannel() {
-    const name = newChannelForm.name.trim();
-    if (!name) { setNewChannelError("Channel name is required."); return; }
-    const slug = newChannelForm.slug.trim() || toSlug(name);
-    if (!slug) { setNewChannelError("Could not generate a valid slug."); return; }
+  async function saveNewSetlist() {
+    const name = newSetlistName.trim();
+    if (!name) { setNewSetlistError("Setlist name is required."); return; }
+    const baseSlug = toSlug(name);
+    if (!baseSlug) { setNewSetlistError("Please use letters or numbers in the name."); return; }
+    // Keep setlist slugs from colliding with each other / existing channels.
+    const existing = new Set(channels.map((c) => c.slug));
+    let slug = baseSlug;
+    for (let i = 2; existing.has(slug); i++) slug = `${baseSlug}-${i}`;
 
+    setSavingSetlist(true);
     const { data, error } = await supabase.from("channels").insert({
       name,
       slug,
-      description: newChannelForm.description.trim() || null,
-      required_role: newChannelForm.required_roles.length > 0 ? newChannelForm.required_roles : null,
-      locked: newChannelForm.locked,
+      channel_type: "setlist",
+      required_role: null,
+      locked: false,
     }).select().single();
+    setSavingSetlist(false);
 
-    if (error) { setNewChannelError(error.message); return; }
+    if (error) { setNewSetlistError(error.message); return; }
 
-    setShowNewChannel(false);
-    setNewChannelForm(BLANK_CHANNEL);
-    setNewChannelError("");
+    setShowNewSetlist(false);
+    setNewSetlistName("");
+    setNewSetlistError("");
     router.refresh();
     if (data) router.push(`/channels/${slug}`);
   }
@@ -390,7 +387,10 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   const dmActive = pathname.startsWith("/dm/");
   const roleActive = orderedRole.some((ch) => pathname === `/channels/${ch.slug}`);
   const channelActive = orderedGeneral.some((ch) => pathname === `/channels/${ch.slug}`);
+  const setlistActive = setlists.some((ch) => pathname === `/channels/${ch.slug}`);
+  const showRoleChannels = roleChannelsEnabled && orderedRole.length > 0;
   const totalUnreadGeneral = orderedGeneral.reduce((sum, ch) => sum + (unreadCounts.get(ch.slug) ?? 0), 0);
+  const totalUnreadSetlist = setlists.reduce((sum, ch) => sum + (unreadCounts.get(ch.slug) ?? 0), 0);
   const totalUnreadRole = orderedRole.reduce((sum, ch) => sum + (unreadCounts.get(ch.slug) ?? 0), 0);
   const totalUnreadDm = localPartners.reduce((sum, p) => sum + (dmUnreadCounts.get(p.id) ?? 0), 0);
 
@@ -421,10 +421,10 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                     <span className="mini-unread-badge">{totalUnreadGeneral > 99 ? "99+" : totalUnreadGeneral}</span>
                   )}
                 </span>
-                <span className="mini-nav-label">Channels</span>
+                <span className="mini-nav-label">General</span>
               </Link>
               <div className="mini-flyout">
-                <p className="mini-flyout-heading">Channels</p>
+                <p className="mini-flyout-heading">General</p>
                 {orderedGeneral.map((ch) => {
                   const count = unreadCounts.get(ch.slug) ?? 0;
                   return (
@@ -437,19 +437,47 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
               </div>
             </div>
 
-            <div className={`mini-nav-wrap${orderedRole.length === 0 ? " mini-nav-wrap--dim" : ""}`}>
-              <div className={`mini-nav-item${roleActive ? " active" : ""}`}>
+            <div className={`mini-nav-wrap${setlists.length === 0 ? " mini-nav-wrap--dim" : ""}`}>
+              <div className={`mini-nav-item${setlistActive ? " active" : ""}`}>
                 <span style={{ position: "relative", display: "inline-flex" }}>
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M10 2L12.1 7.5H18L13.4 10.8L15.1 16.5L10 13.2L4.9 16.5L6.6 10.8L2 7.5H7.9L10 2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" strokeLinecap="round"/>
+                    <path d="M6 4H17M6 9H17M6 14H13M3 4.5V3.5M3 9.5V8.5M3 14.5V13.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
                   </svg>
-                  {totalUnreadRole > 0 && (
-                    <span className="mini-unread-badge">{totalUnreadRole > 99 ? "99+" : totalUnreadRole}</span>
+                  {totalUnreadSetlist > 0 && (
+                    <span className="mini-unread-badge">{totalUnreadSetlist > 99 ? "99+" : totalUnreadSetlist}</span>
                   )}
                 </span>
-                <span className="mini-nav-label">Role Chats</span>
+                <span className="mini-nav-label">Setlists</span>
               </div>
-              {orderedRole.length > 0 && (
+              {setlists.length > 0 && (
+                <div className="mini-flyout">
+                  <p className="mini-flyout-heading">Setlists</p>
+                  {setlists.map((ch) => {
+                    const count = unreadCounts.get(ch.slug) ?? 0;
+                    return (
+                      <Link key={ch.id} href={`/channels/${ch.slug}`} className={`mini-flyout-item${pathname === `/channels/${ch.slug}` ? " active" : ""}`}>
+                        <span className="mini-flyout-hash">#</span>{ch.name}
+                        {count > 0 && <span className="mini-flyout-unread-badge">{count > 99 ? "99+" : count}</span>}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {showRoleChannels && (
+              <div className="mini-nav-wrap">
+                <div className={`mini-nav-item${roleActive ? " active" : ""}`}>
+                  <span style={{ position: "relative", display: "inline-flex" }}>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path d="M10 2L12.1 7.5H18L13.4 10.8L15.1 16.5L10 13.2L4.9 16.5L6.6 10.8L2 7.5H7.9L10 2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" strokeLinecap="round"/>
+                    </svg>
+                    {totalUnreadRole > 0 && (
+                      <span className="mini-unread-badge">{totalUnreadRole > 99 ? "99+" : totalUnreadRole}</span>
+                    )}
+                  </span>
+                  <span className="mini-nav-label">Role Chats</span>
+                </div>
                 <div className="mini-flyout">
                   <p className="mini-flyout-heading">Role Channels</p>
                   {orderedRole.map((ch) => {
@@ -462,8 +490,8 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                     );
                   })}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="mini-nav-wrap">
               <Link href="/dm" className={`mini-nav-item${dmActive ? " active" : ""}`}>
@@ -534,19 +562,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
 
         <nav className="sidebar-nav">
           <div className="sidebar-section-row">
-            <span className="sidebar-section-label">Channels</span>
-            {isAdmin && !isPreview && (
-              <button
-                className="sidebar-new-dm-btn"
-                onClick={() => { setNewChannelForm(BLANK_CHANNEL); setNewChannelError(""); setShowNewChannel(true); }}
-                title="New channel"
-                aria-label="New channel"
-              >
-                <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                  <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
+            <span className="sidebar-section-label">General</span>
           </div>
           {orderedGeneral.map((ch, index) => {
             const active = pathname === `/channels/${ch.slug}`;
@@ -589,7 +605,41 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
             );
           })}
 
-          {orderedRole.length > 0 && (
+          <div className="sidebar-separator" />
+          <div className="sidebar-section-row">
+            <span className="sidebar-section-label">Setlists</span>
+            {canManageSetlists && (
+              <button
+                className="sidebar-new-dm-btn"
+                onClick={() => { setNewSetlistName(""); setNewSetlistError(""); setShowNewSetlist(true); }}
+                title="New setlist"
+                aria-label="New setlist"
+              >
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
+          {setlists.map((ch) => {
+            const active = pathname === `/channels/${ch.slug}`;
+            return (
+              <Link key={ch.id} href={`/channels/${ch.slug}`} className={`sidebar-item${active ? " active" : ""}`}>
+                <span className="sidebar-hash">#</span>
+                {ch.name}
+                {(unreadCounts.get(ch.slug) ?? 0) > 0 && (
+                  <span className="channel-unread-badge">{Math.min(unreadCounts.get(ch.slug)!, 99)}</span>
+                )}
+              </Link>
+            );
+          })}
+          {setlists.length === 0 && (
+            <p className="sidebar-empty-hint">
+              {canManageSetlists ? "No setlists yet — tap + to create one." : "No setlists yet."}
+            </p>
+          )}
+
+          {showRoleChannels && (
             <>
               <div className="sidebar-separator" />
               <p className="sidebar-section-label">Role Channels</p>
@@ -743,96 +793,34 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
         <NewDmModal currentUserId={currentUser.id} onClose={() => setShowNewDm(false)} />
       )}
 
-      {showNewChannel && (
-        <div className="modal-overlay" onClick={() => setShowNewChannel(false)}>
-          <div className="modal-box modal-box--wide" onClick={(e) => e.stopPropagation()}>
+      {showNewSetlist && (
+        <div className="modal-overlay" onClick={() => setShowNewSetlist(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
             <div className="modal-header">
-              <h2 className="modal-title">New Channel</h2>
-              <button className="modal-close" onClick={() => setShowNewChannel(false)}>×</button>
+              <h2 className="modal-title">New Setlist</h2>
+              <button className="modal-close" onClick={() => setShowNewSetlist(false)}>×</button>
             </div>
-            <div style={{ padding: "16px 20px 20px" }}>
-
-              <div className="ch-form-row">
-                <div className="ch-form-field" style={{ flex: 2 }}>
-                  <label className="ch-form-label">Name</label>
-                  <input
-                    className="ch-form-input"
-                    value={newChannelForm.name}
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      setNewChannelForm((f) => ({ ...f, name, slug: toSlug(name) }));
-                    }}
-                    placeholder="e.g. Off-topic"
-                    autoFocus
-                  />
-                </div>
-                <div className="ch-form-field" style={{ flex: 1 }}>
-                  <label className="ch-form-label">Slug</label>
-                  <div className="ch-form-slug-wrap">
-                    <span className="ch-form-slug-prefix">/channels/</span>
-                    <input
-                      className="ch-form-input ch-form-input-slug"
-                      value={newChannelForm.slug}
-                      onChange={(e) => setNewChannelForm((f) => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
-                      placeholder="off-topic"
-                    />
-                  </div>
-                </div>
-              </div>
-
+            <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
+                Creates a chat for a setlist. You can rename or remove it later.
+              </p>
               <div className="ch-form-field">
-                <label className="ch-form-label">Description <span style={{ color: "rgba(255,255,255,0.3)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
+                <label className="ch-form-label">Setlist Name</label>
                 <input
                   className="ch-form-input"
-                  value={newChannelForm.description}
-                  onChange={(e) => setNewChannelForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="What's this channel for?"
+                  value={newSetlistName}
+                  onChange={(e) => { setNewSetlistName(e.target.value); setNewSetlistError(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !savingSetlist) saveNewSetlist(); }}
+                  placeholder="e.g. Sunday AM — June 29"
+                  autoFocus
                 />
               </div>
-
-              <div className="ch-form-row">
-                <div className="ch-form-field" style={{ flex: 1 }}>
-                  <label className="ch-form-label">Access</label>
-                  <p className="ch-role-hint">Check roles to restrict access. Leave all unchecked for public.</p>
-                  <div className="ch-form-checks">
-                    {ROLE_OPTIONS.map((r) => (
-                      <label key={r.value} className="ch-check">
-                        <input
-                          type="checkbox"
-                          checked={newChannelForm.required_roles.includes(r.value)}
-                          onChange={(e) => setNewChannelForm((f) => ({
-                            ...f,
-                            required_roles: e.target.checked
-                              ? [...f.required_roles, r.value]
-                              : f.required_roles.filter((x) => x !== r.value),
-                          }))}
-                        />
-                        <span>{r.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="ch-form-field" style={{ flex: 1 }}>
-                  <label className="ch-form-label">Posting permissions</label>
-                  <div className="ch-form-radios">
-                    <label className="ch-radio">
-                      <input type="radio" checked={!newChannelForm.locked} onChange={() => setNewChannelForm((f) => ({ ...f, locked: false }))} />
-                      <span>Open — all members can post</span>
-                    </label>
-                    <label className="ch-radio">
-                      <input type="radio" checked={newChannelForm.locked} onChange={() => setNewChannelForm((f) => ({ ...f, locked: true }))} />
-                      <span>Locked — admins &amp; mods only</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {newChannelError && <p className="ch-form-error">{newChannelError}</p>}
-
+              {newSetlistError && <p className="ch-form-error">{newSetlistError}</p>}
               <div className="ch-form-actions">
-                <button className="ch-btn-primary" onClick={saveNewChannel}>Create Channel</button>
-                <button className="ch-btn-ghost" onClick={() => setShowNewChannel(false)}>Cancel</button>
+                <button className="ch-btn-primary" onClick={saveNewSetlist} disabled={savingSetlist}>
+                  {savingSetlist ? "Creating…" : "Create Setlist"}
+                </button>
+                <button className="ch-btn-ghost" onClick={() => setShowNewSetlist(false)}>Cancel</button>
               </div>
             </div>
           </div>

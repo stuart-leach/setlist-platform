@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import UserAvatar from "@/components/UserAvatar";
 
-type Tab = "people" | "appeals" | "banned" | "muted" | "flagged";
+type Tab = "people" | "appeals" | "banned" | "muted" | "flagged" | "settings";
 
 interface Props {
   mutedUsers: any[];
@@ -13,6 +13,7 @@ interface Props {
   appeals: any[];
   flags: any[];
   allUsers: any[];
+  roleChannelsEnabled: boolean;
 }
 
 const PLATFORM_ROLES = [
@@ -73,9 +74,11 @@ const btnJump: React.CSSProperties = { ...btnBase, background: ADMIN_RED_DIM, co
 
 const mutedTextStyle: React.CSSProperties = { color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 24 };
 
-export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers }: Props) {
+export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers, roleChannelsEnabled }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("people");
+  const [roleChannelsOn, setRoleChannelsOn] = useState<boolean>(roleChannelsEnabled);
+  const [savingSetting, setSavingSetting] = useState(false);
   const [localAppeals, setLocalAppeals] = useState<any[]>(appeals);
   const [localBanned, setLocalBanned] = useState<any[]>(bannedUsers);
   const [localMuted, setLocalMuted] = useState<any[]>(mutedUsers);
@@ -193,7 +196,20 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
     { key: "banned",   label: "Banned",   count: localBanned.length },
     { key: "muted",    label: "Muted",    count: localMuted.length },
     { key: "flagged",  label: "Flagged",  count: localFlags.length, danger: true },
+    { key: "settings", label: "Settings" },
   ];
+
+  async function toggleRoleChannels(next: boolean) {
+    setRoleChannelsOn(next); // optimistic
+    setSavingSetting(true);
+    const { error } = await supabase
+      .from("community_settings")
+      .update({ role_channels_enabled: next, updated_at: new Date().toISOString() })
+      .eq("id", true);
+    setSavingSetting(false);
+    if (error) { setRoleChannelsOn(!next); return; } // revert on failure
+    router.refresh();
+  }
 
   const totalAlerts = localAppeals.length + localFlags.length;
 
@@ -615,6 +631,65 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
                   );
                 })
               )}
+            </div>
+          )}
+
+          {/* ── Settings tab ──────────────────────────────────────────────── */}
+          {activeTab === "settings" && (
+            <div style={{ padding: "20px 0", maxWidth: 560 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 16,
+                  padding: "16px 18px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
+                    Role channels
+                  </p>
+                  <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
+                    Show role-specific channels (Worship Leaders, Band Members, etc.) in the sidebar.
+                    When off, the section is hidden for everyone and those channels can&apos;t be opened.
+                  </p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={roleChannelsOn}
+                  disabled={savingSetting}
+                  onClick={() => toggleRoleChannels(!roleChannelsOn)}
+                  style={{
+                    flexShrink: 0,
+                    width: 44,
+                    height: 26,
+                    borderRadius: 13,
+                    border: "none",
+                    cursor: savingSetting ? "default" : "pointer",
+                    background: roleChannelsOn ? "#34c759" : "rgba(255,255,255,0.18)",
+                    position: "relative",
+                    transition: "background 0.15s",
+                    marginTop: 2,
+                  }}
+                  title={roleChannelsOn ? "Disable role channels" : "Enable role channels"}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 3,
+                      left: roleChannelsOn ? 21 : 3,
+                      width: 20,
+                      height: 20,
+                      borderRadius: "50%",
+                      background: "#fff",
+                      transition: "left 0.15s",
+                    }}
+                  />
+                </button>
+              </div>
             </div>
           )}
 

@@ -24,17 +24,14 @@ const PREVIEW_USER: Profile = {
 };
 
 const PREVIEW_CHANNELS: Channel[] = [
-  { id: "0",  slug: "rules",                name: "Rules",                description: "Community rules",            created_at: "", required_role: null,              pinned_message_id: null, locked: true  },
-  { id: "1",  slug: "general",              name: "General",              description: "General discussion",         created_at: "", required_role: null,              pinned_message_id: null, locked: false },
-  { id: "2",  slug: "announcements",        name: "Announcements",        description: "Product updates",            created_at: "", required_role: null,              pinned_message_id: null, locked: false },
-  { id: "3",  slug: "playback",             name: "Playback",             description: "Playback discussion",        created_at: "", required_role: null,              pinned_message_id: null, locked: false },
-  { id: "4",  slug: "chart-builder",        name: "ChartBuilder",         description: "ChartBuilder tips",         created_at: "", required_role: null,              pinned_message_id: null, locked: false },
-  { id: "5",  slug: "help",                 name: "Support",              description: "Get help",                   created_at: "", required_role: null,              pinned_message_id: null, locked: false },
-  { id: "6",  slug: "worship-leaders",      name: "Worship Leaders",      description: "For worship leaders",        created_at: "", required_role: ["worship_leader"],       pinned_message_id: null, locked: false },
-  { id: "7",  slug: "band-members",         name: "Band Members",         description: "For band members",           created_at: "", required_role: ["band_member"],          pinned_message_id: null, locked: false },
-  { id: "8",  slug: "vocalists",            name: "Vocalists",            description: "For vocalists and singers",  created_at: "", required_role: ["vocalist"],             pinned_message_id: null, locked: false },
-  { id: "9",  slug: "music-directors",      name: "Music Directors",      description: "For music directors",        created_at: "", required_role: ["music_director"],       pinned_message_id: null, locked: false },
-  { id: "10", slug: "production-directors", name: "Production Directors", description: "For production directors",   created_at: "", required_role: ["production_director"],  pinned_message_id: null, locked: false },
+  { id: "0",  slug: "rules",                name: "Rules",                description: "Community rules",            created_at: "", required_role: null,              pinned_message_id: null, locked: true,  org_id: null, channel_type: "system"  },
+  { id: "1",  slug: "general",              name: "General",              description: "General discussion",         created_at: "", required_role: null,              pinned_message_id: null, locked: false, org_id: null, channel_type: "general" },
+  { id: "2",  slug: "announcements",        name: "Announcements",        description: "Product updates",            created_at: "", required_role: null,              pinned_message_id: null, locked: false, org_id: null, channel_type: "general" },
+  { id: "6",  slug: "worship-leaders",      name: "Worship Leaders",      description: "For worship leaders",        created_at: "", required_role: ["worship_leader"],       pinned_message_id: null, locked: false, org_id: null, channel_type: "role" },
+  { id: "7",  slug: "band-members",         name: "Band Members",         description: "For band members",           created_at: "", required_role: ["band_member"],          pinned_message_id: null, locked: false, org_id: null, channel_type: "role" },
+  { id: "8",  slug: "vocalists",            name: "Vocalists",            description: "For vocalists and singers",  created_at: "", required_role: ["vocalist"],             pinned_message_id: null, locked: false, org_id: null, channel_type: "role" },
+  { id: "9",  slug: "music-directors",      name: "Music Directors",      description: "For music directors",        created_at: "", required_role: ["music_director"],       pinned_message_id: null, locked: false, org_id: null, channel_type: "role" },
+  { id: "10", slug: "production-directors", name: "Production Directors", description: "For production directors",   created_at: "", required_role: ["production_director"],  pinned_message_id: null, locked: false, org_id: null, channel_type: "role" },
 ];
 
 export default async function CommunityLayout({
@@ -48,7 +45,7 @@ export default async function CommunityLayout({
   // Unauthenticated users must log in first
   if (!user) redirect("/auth/login");
 
-  const [channelsResult, profileResult, dmThreadsResult, communityRolesResult, orgsResult] = await Promise.all([
+  const [channelsResult, profileResult, dmThreadsResult, communityRolesResult, orgsResult, settingsResult] = await Promise.all([
     // Filter to community-only channels (org_id IS NULL). If migration 019 hasn't run yet
     // and the org_id column doesn't exist, fall back to fetching all channels.
     supabase.from("channels").select("*").is("org_id", null).order("name")
@@ -62,6 +59,7 @@ export default async function CommunityLayout({
       .limit(20),
     supabase.from("community_roles").select("role").eq("user_id", user.id),
     supabase.from("organizations").select("*").order("name"),
+    supabase.from("community_settings").select("role_channels_enabled").maybeSingle(),
   ]);
 
   const channels = channelsResult.data ?? PREVIEW_CHANNELS;
@@ -83,6 +81,8 @@ export default async function CommunityLayout({
   }));
   const userCommunityRoles: string[] = (communityRolesResult.data ?? []).map((r) => r.role);
   const userOrgs: Organization[] = (orgsResult.data ?? []) as Organization[];
+  // Default to enabled if the row/table isn't present yet (migration 021 not run).
+  const roleChannelsEnabled: boolean = settingsResult.data?.role_channels_enabled ?? true;
 
   return (
     <AnonymousAuthProvider
@@ -90,7 +90,7 @@ export default async function CommunityLayout({
       displayName={currentUser.display_name ?? null}
       hasRoles={userCommunityRoles.length > 0}
     >
-      <CommunityShell channels={channels} currentUser={currentUser} dmPartners={dmPartners} dmThreadIds={dmThreadIds} userCommunityRoles={userCommunityRoles} orgs={userOrgs}>
+      <CommunityShell channels={channels} currentUser={currentUser} dmPartners={dmPartners} dmThreadIds={dmThreadIds} userCommunityRoles={userCommunityRoles} orgs={userOrgs} roleChannelsEnabled={roleChannelsEnabled}>
         {children}
       </CommunityShell>
       <IntercomProvider

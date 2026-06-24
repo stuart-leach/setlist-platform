@@ -62,6 +62,7 @@ export interface Database {
           pinned_message_id: string | null;
           locked: boolean;
           org_id: string | null;
+          channel_type: string;
         };
         Insert: {
           id?: string;
@@ -73,6 +74,7 @@ export interface Database {
           pinned_message_id?: string | null;
           locked?: boolean;
           org_id?: string | null;
+          channel_type?: string;
         };
         Update: {
           name?: string;
@@ -82,7 +84,13 @@ export interface Database {
           pinned_message_id?: string | null;
           locked?: boolean;
           org_id?: string | null;
+          channel_type?: string;
         };
+      };
+      community_settings: {
+        Row: { id: boolean; role_channels_enabled: boolean; updated_at: string; };
+        Insert: { id?: boolean; role_channels_enabled?: boolean; updated_at?: string; };
+        Update: { role_channels_enabled?: boolean; updated_at?: string; };
       };
       community_roles: {
         Row: { id: string; user_id: string; role: string; created_at: string; };
@@ -199,6 +207,7 @@ export type MessageReaction = Database["public"]["Tables"]["message_reactions"][
 export type MessageReply = Database["public"]["Tables"]["message_replies"]["Row"];
 export type MessageReplyWithProfile = MessageReply & { profiles: Profile };
 export type CommunityRole = Database["public"]["Tables"]["community_roles"]["Row"];
+export type CommunitySettings = Database["public"]["Tables"]["community_settings"]["Row"];
 
 export interface Organization {
   id: string;

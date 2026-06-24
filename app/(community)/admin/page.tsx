@@ -14,7 +14,7 @@ export default async function AdminPage() {
 
   // Run all queries in parallel — keep flags as two separate steps to avoid
   // a 3-level deep PostgREST join which can silently return nothing.
-  const [mutedResult, bannedResult, appealsResult, flagsResult, peopleResult] = await Promise.all([
+  const [mutedResult, bannedResult, appealsResult, flagsResult, peopleResult, settingsResult] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, username, display_name, avatar_url, muted_until")
@@ -52,6 +52,7 @@ export default async function AdminPage() {
       .select("id, username, display_name, avatar_url, role, is_banned, muted_until, created_at, community_roles(role)")
       .order("created_at", { ascending: false })
       .limit(500),
+    supabase.from("community_settings").select("role_channels_enabled").maybeSingle(),
   ]);
 
   const rawFlags = flagsResult.data ?? [];
@@ -87,6 +88,7 @@ export default async function AdminPage() {
       appeals={appealsResult.data ?? []}
       flags={flags}
       allUsers={peopleResult.data ?? []}
+      roleChannelsEnabled={settingsResult.data?.role_channels_enabled ?? true}
     />
   );
 }
