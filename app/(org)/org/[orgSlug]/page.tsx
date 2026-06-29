@@ -17,7 +17,7 @@ export default async function OrgRootPage({ params }: Props) {
     .eq("slug", orgSlug)
     .single();
 
-  if (!org) redirect("/channels/general");
+  if (!org) redirect("/");
 
   // Redirect to the first channel alphabetically
   const { data: firstChannel } = await supabase

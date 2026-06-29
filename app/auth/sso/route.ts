@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth/login?error=sso_failed", request.url));
   }
 
-  const response = NextResponse.redirect(new URL("/channels/general", request.url));
+  const response = NextResponse.redirect(new URL("/", request.url));
 
   // Set the Supabase auth cookies on the response
   response.cookies.set("sb-access-token", sessionData.session.access_token, {

@@ -1,4 +1,4 @@
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AdminHub from "./AdminHub";
 
@@ -8,7 +8,7 @@ export default async function AdminPage() {
   if (!user) redirect("/auth/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") redirect("/channels/general");
+  if (profile?.role !== "admin") redirect("/");
 
   const now = new Date().toISOString();
 
@@ -73,15 +73,9 @@ export default async function AdminPage() {
         .in("id", channelIds)
     : { data: [] };
 
-  // MultiTracks connection status (service role — the table is locked to clients).
-  // Only non-secret fields are read; the encrypted token never leaves the server.
-  const serviceDb = await createServiceClient();
-  const { data: mtConn } = await serviceDb
-    .from("mt_connection")
-    .select("connected_email, connected_at, last_error")
-    .eq("id", true)
-    .maybeSingle();
-
+  // NOTE: MultiTracks connection + branding + role-channel settings are now
+  // per-org (managed in each org's Admin Hub), not here. This platform hub keeps
+  // only cross-org moderation (People/Banned/Muted/Flagged/Appeals).
   const channelMap = new Map((channelRows ?? []).map((c: any) => [c.id, c]));
 
   // Attach channel info to each flag
@@ -101,9 +95,9 @@ export default async function AdminPage() {
       setlistsLastSyncedAt={settingsResult.data?.setlists_last_synced_at ?? null}
       communityName={settingsResult.data?.community_name ?? null}
       logoUrl={settingsResult.data?.logo_url ?? null}
-      mtConnectedEmail={mtConn?.connected_email ?? null}
-      mtConnectedAt={mtConn?.connected_at ?? null}
-      mtLastError={mtConn?.last_error ?? null}
+      mtConnectedEmail={null}
+      mtConnectedAt={null}
+      mtLastError={null}
     />
   );
 }

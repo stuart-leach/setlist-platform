@@ -311,7 +311,7 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
     { key: "banned",   label: "Banned",   count: localBanned.length },
     { key: "muted",    label: "Muted",    count: localMuted.length },
     { key: "flagged",  label: "Flagged",  count: localFlags.length, danger: true },
-    { key: "settings", label: "Settings" },
+    // Settings (role channels, MultiTracks, branding) moved to each org's Admin Hub.
   ];
 
   async function toggleRoleChannels(next: boolean) {

@@ -44,7 +44,7 @@ export default function LoginPage() {
       );
       return;
     }
-    router.push("/channels/general");
+    router.push("/");
     router.refresh();
   }
 
@@ -102,7 +102,7 @@ export default function LoginPage() {
     // the welcome modal in AnonymousAuthProvider will prompt for role selection.
     // Otherwise show the "check your email" screen.
     if (data.session) {
-      router.push("/channels/general");
+      router.push("/");
       router.refresh();
     } else {
       setSuDone(true);

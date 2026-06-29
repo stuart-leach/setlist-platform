@@ -18,12 +18,6 @@ export default function OrgSwitcher({ orgs }: Props) {
 
   return (
     <div className="org-switcher">
-      {orgs.length > 0 && (
-        <Link href="/channels/general" className={`org-pill${!inOrg ? " active" : ""}`}>
-          <span className="org-pill-dot" />
-          Community
-        </Link>
-      )}
       {orgs.map((org) => (
         <Link
           key={org.id}
@@ -34,6 +28,12 @@ export default function OrgSwitcher({ orgs }: Props) {
           {org.name}
         </Link>
       ))}
+      <Link href="/onboarding" className="org-pill org-pill-add" title="New organization" aria-label="New organization">
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+          <path d="M6 1V11M1 6H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+        New
+      </Link>
     </div>
   );
 }

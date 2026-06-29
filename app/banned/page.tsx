@@ -8,7 +8,7 @@ export default async function BannedPage() {
   if (!user) redirect("/auth/login");
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  if (!profile?.is_banned) redirect("/channels/general");
+  if (!profile?.is_banned) redirect("/");
 
   const { data: appeal } = await supabase
     .from("ban_appeals")

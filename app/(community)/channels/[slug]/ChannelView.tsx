@@ -52,7 +52,7 @@ function buildReactionMap(msgs: MessageWithProfile[]): Map<string, MessageReacti
   return map;
 }
 
-export default function ChannelView({ channel, initialMessages, currentUserId, currentUserRole, initialPinnedMessage, currentUserMutedUntil, basePath = "/channels", deleteFallback = "/channels/general" }: Props) {
+export default function ChannelView({ channel, initialMessages, currentUserId, currentUserRole, initialPinnedMessage, currentUserMutedUntil, basePath = "/channels", deleteFallback = "/" }: Props) {
   const router = useRouter();
   const [messages, setMessages] = useState<MessageWithProfile[]>(initialMessages);
   const [reactionMap, setReactionMap] = useState<Map<string, MessageReaction[]>>(() => buildReactionMap(initialMessages));
