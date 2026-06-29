@@ -1,5 +1,8 @@
 // Server-only client for the MultiTracks Playback API. Only ever imported by
-// server routes — credentials come from env vars and never reach the browser.
+// server routes. The admin enters credentials in-app; we authenticate once and
+// persist the encrypted session token — the raw password is never stored.
+
+import { createHash, createCipheriv, createDecipheriv, randomBytes } from "crypto";
 
 const BASE = process.env.MT_API_BASE || "https://api.multitracks.com";
 const BUILD = 85420;
@@ -31,16 +34,10 @@ async function post(path: string, body: Record<string, unknown>): Promise<any> {
   return res.json();
 }
 
-// Logs in with the service-account credentials and returns the session fields
-// every other endpoint needs. The session hash is long-lived but we re-auth
-// per sync to stay stateless (serverless has no durable memory between runs).
-export async function authenticate(): Promise<MtSession> {
-  const username = process.env.MT_USERNAME;
-  const password = process.env.MT_PASSWORD;
-  if (!username || !password) {
-    throw new Error("MultiTracks sync is not configured (MT_USERNAME / MT_PASSWORD missing).");
-  }
-
+// Logs in with admin-supplied credentials and returns the session fields every
+// other endpoint needs. Called once at "Connect" time; the password is used
+// here and then discarded (only the returned token is persisted, encrypted).
+export async function authenticateWith(username: string, password: string): Promise<MtSession> {
   const data = await post("/playback/authenticate", {
     username,
     password,
@@ -56,6 +53,31 @@ export async function authenticate(): Promise<MtSession> {
     throw new Error(data?.message || "MultiTracks authentication failed.");
   }
   return { hash: data.hash, customerID: data.customerID, userAccessID: data.userAccessID };
+}
+
+// ── Token encryption (AES-256-GCM) ────────────────────────────────────────────
+// The session token is a bearer credential, so we encrypt it at rest. The key is
+// derived from CRON_SECRET so no extra env var is needed; rotating CRON_SECRET
+// invalidates the stored token (admin simply reconnects).
+function encKey(): Buffer {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) throw new Error("CRON_SECRET is required to encrypt the MultiTracks token.");
+  return createHash("sha256").update(secret).digest();
+}
+
+export function encryptToken(plain: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", encKey(), iv);
+  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv.toString("base64"), tag.toString("base64"), enc.toString("base64")].join(":");
+}
+
+export function decryptToken(stored: string): string {
+  const [ivB64, tagB64, dataB64] = stored.split(":");
+  const decipher = createDecipheriv("aes-256-gcm", encKey(), Buffer.from(ivB64, "base64"));
+  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]).toString("utf8");
 }
 
 // Fetches upcoming setlists (from today forward).
@@ -85,9 +107,4 @@ export async function fetchSetlists(session: MtSession, search = ""): Promise<Mt
       serviceTypeTitle: s.serviceTypeTitle || "",
     }))
     .filter((s) => s.setlistID != null);
-}
-
-export async function getUpcomingSetlists(): Promise<MtSetlist[]> {
-  const session = await authenticate();
-  return fetchSetlists(session);
 }

@@ -17,6 +17,9 @@ interface Props {
   setlistsLastSyncedAt: string | null;
   communityName: string | null;
   logoUrl: string | null;
+  mtConnectedEmail: string | null;
+  mtConnectedAt: string | null;
+  mtLastError: string | null;
 }
 
 const PLATFORM_ROLES = [
@@ -77,7 +80,7 @@ const btnJump: React.CSSProperties = { ...btnBase, background: ADMIN_RED_DIM, co
 
 const mutedTextStyle: React.CSSProperties = { color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 24 };
 
-export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers, roleChannelsEnabled, setlistsLastSyncedAt, communityName, logoUrl }: Props) {
+export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers, roleChannelsEnabled, setlistsLastSyncedAt, communityName, logoUrl, mtConnectedEmail, mtConnectedAt, mtLastError }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("people");
   const [roleChannelsOn, setRoleChannelsOn] = useState<boolean>(roleChannelsEnabled);
@@ -85,6 +88,55 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<string | null>(setlistsLastSyncedAt);
+
+  // ── MultiTracks connection ────────────────────────────────────────────────
+  const [mtEmail, setMtEmail] = useState<string | null>(mtConnectedEmail);
+  const [mtConnAt, setMtConnAt] = useState<string | null>(mtConnectedAt);
+  const [connEmail, setConnEmail] = useState("");
+  const [connPassword, setConnPassword] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [connMsg, setConnMsg] = useState<string | null>(mtLastError ? `Last sync error: ${mtLastError}` : null);
+
+  async function connectMt() {
+    if (!connEmail.trim() || !connPassword) { setConnMsg("Enter your MultiTracks email and password."); return; }
+    setConnecting(true);
+    setConnMsg(null);
+    try {
+      const res = await fetch("/api/multitracks/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: connEmail.trim(), password: connPassword }),
+      });
+      const body = await res.json();
+      if (!res.ok) { setConnMsg(body.error || "Could not connect."); }
+      else {
+        setMtEmail(body.email);
+        setMtConnAt(new Date().toISOString());
+        setConnEmail("");
+        setConnPassword("");
+        setConnMsg("Connected. You can sync setlists now.");
+        router.refresh();
+      }
+    } catch {
+      setConnMsg("Could not reach the server.");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function disconnectMt() {
+    setConnecting(true);
+    setConnMsg(null);
+    try {
+      await fetch("/api/multitracks/connect", { method: "DELETE" });
+      setMtEmail(null);
+      setMtConnAt(null);
+      setConnMsg("Disconnected.");
+      router.refresh();
+    } finally {
+      setConnecting(false);
+    }
+  }
 
   // ── Branding ────────────────────────────────────────────────────────────────
   const [brandName, setBrandName] = useState<string>(communityName ?? "");
@@ -752,6 +804,71 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
                     }}
                   />
                 </button>
+              </div>
+
+              {/* MultiTracks account connection */}
+              <div
+                style={{
+                  padding: "16px 18px",
+                  marginTop: 14,
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
+                  MultiTracks account
+                </p>
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
+                  Connect your MultiTracks login so the platform can pull your setlists. We store only a secure
+                  session token — never your password.
+                </p>
+
+                {mtEmail ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, color: "#34c759", fontWeight: 600 }}>
+                        Connected as {mtEmail}
+                      </p>
+                      {mtConnAt && (
+                        <p style={{ margin: "3px 0 0", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+                          Connected {timeAgo(mtConnAt)}
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={disconnectMt} disabled={connecting} style={{ ...btnNeutral, flexShrink: 0, padding: "7px 14px", cursor: connecting ? "default" : "pointer", opacity: connecting ? 0.6 : 1 }}>
+                      Disconnect
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
+                    <input
+                      className="ch-form-input"
+                      type="email"
+                      autoComplete="off"
+                      value={connEmail}
+                      onChange={(e) => setConnEmail(e.target.value)}
+                      placeholder="MultiTracks email"
+                    />
+                    <input
+                      className="ch-form-input"
+                      type="password"
+                      autoComplete="new-password"
+                      value={connPassword}
+                      onChange={(e) => setConnPassword(e.target.value)}
+                      placeholder="MultiTracks password"
+                    />
+                    <button onClick={connectMt} disabled={connecting} style={{ ...btnNeutral, alignSelf: "flex-start", padding: "7px 14px", cursor: connecting ? "default" : "pointer", opacity: connecting ? 0.6 : 1 }}>
+                      {connecting ? "Connecting…" : "Connect"}
+                    </button>
+                  </div>
+                )}
+
+                {connMsg && (
+                  <p style={{ margin: "12px 0 0", fontSize: 12, color: /Connected|sync setlists|Disconnected/.test(connMsg) ? "#34c759" : ADMIN_RED }}>
+                    {connMsg}
+                  </p>
+                )}
               </div>
 
               <div

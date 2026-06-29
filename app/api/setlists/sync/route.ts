@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getUpcomingSetlists } from "@/lib/multitracks";
+import { fetchSetlists, decryptToken } from "@/lib/multitracks";
 
 export const dynamic = "force-dynamic";
 
@@ -22,18 +22,33 @@ async function runSync(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let setlists;
-  try {
-    setlists = await getUpcomingSetlists();
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "MultiTracks sync failed." },
-      { status: 502 }
-    );
+  // Service-role client bypasses RLS to read the connection and upsert channels.
+  const db = await createServiceClient();
+
+  const { data: conn } = await db
+    .from("mt_connection")
+    .select("session_hash, customer_id, user_access_id")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (!conn?.session_hash || conn.customer_id == null || conn.user_access_id == null) {
+    return NextResponse.json({ error: "No MultiTracks account connected." }, { status: 400 });
   }
 
-  // Service-role client bypasses RLS so the sync can upsert channels.
-  const db = await createServiceClient();
+  let setlists;
+  try {
+    const session = {
+      hash: decryptToken(conn.session_hash),
+      customerID: conn.customer_id,
+      userAccessID: conn.user_access_id,
+    };
+    setlists = await fetchSetlists(session);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "MultiTracks sync failed.";
+    await db.from("mt_connection").update({ last_error: msg }).eq("id", true);
+    return NextResponse.json({ error: msg }, { status: 502 });
+  }
+
   let created = 0;
   let updated = 0;
 

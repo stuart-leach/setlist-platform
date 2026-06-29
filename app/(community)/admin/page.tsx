@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AdminHub from "./AdminHub";
 
@@ -73,6 +73,15 @@ export default async function AdminPage() {
         .in("id", channelIds)
     : { data: [] };
 
+  // MultiTracks connection status (service role — the table is locked to clients).
+  // Only non-secret fields are read; the encrypted token never leaves the server.
+  const serviceDb = await createServiceClient();
+  const { data: mtConn } = await serviceDb
+    .from("mt_connection")
+    .select("connected_email, connected_at, last_error")
+    .eq("id", true)
+    .maybeSingle();
+
   const channelMap = new Map((channelRows ?? []).map((c: any) => [c.id, c]));
 
   // Attach channel info to each flag
@@ -92,6 +101,9 @@ export default async function AdminPage() {
       setlistsLastSyncedAt={settingsResult.data?.setlists_last_synced_at ?? null}
       communityName={settingsResult.data?.community_name ?? null}
       logoUrl={settingsResult.data?.logo_url ?? null}
+      mtConnectedEmail={mtConn?.connected_email ?? null}
+      mtConnectedAt={mtConn?.connected_at ?? null}
+      mtLastError={mtConn?.last_error ?? null}
     />
   );
 }

@@ -93,6 +93,11 @@ export interface Database {
           mt_setlist_date?: string | null;
         };
       };
+      mt_connection: {
+        Row: { id: boolean; session_hash: string | null; customer_id: number | null; user_access_id: number | null; connected_email: string | null; connected_at: string | null; last_error: string | null; };
+        Insert: { id?: boolean; session_hash?: string | null; customer_id?: number | null; user_access_id?: number | null; connected_email?: string | null; connected_at?: string | null; last_error?: string | null; };
+        Update: { session_hash?: string | null; customer_id?: number | null; user_access_id?: number | null; connected_email?: string | null; connected_at?: string | null; last_error?: string | null; };
+      };
       community_settings: {
         Row: { id: boolean; role_channels_enabled: boolean; setlists_last_synced_at: string | null; community_name: string | null; logo_url: string | null; updated_at: string; };
         Insert: { id?: boolean; role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; community_name?: string | null; logo_url?: string | null; updated_at?: string; };
