@@ -15,6 +15,8 @@ interface Props {
   allUsers: any[];
   roleChannelsEnabled: boolean;
   setlistsLastSyncedAt: string | null;
+  communityName: string | null;
+  logoUrl: string | null;
 }
 
 const PLATFORM_ROLES = [
@@ -75,7 +77,7 @@ const btnJump: React.CSSProperties = { ...btnBase, background: ADMIN_RED_DIM, co
 
 const mutedTextStyle: React.CSSProperties = { color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 24 };
 
-export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers, roleChannelsEnabled, setlistsLastSyncedAt }: Props) {
+export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allUsers, roleChannelsEnabled, setlistsLastSyncedAt, communityName, logoUrl }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("people");
   const [roleChannelsOn, setRoleChannelsOn] = useState<boolean>(roleChannelsEnabled);
@@ -83,6 +85,43 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<string | null>(setlistsLastSyncedAt);
+
+  // ── Branding ────────────────────────────────────────────────────────────────
+  const [brandName, setBrandName] = useState<string>(communityName ?? "");
+  const [brandLogo, setBrandLogo] = useState<string | null>(logoUrl);
+  const [savingBrand, setSavingBrand] = useState(false);
+  const [brandMsg, setBrandMsg] = useState<string | null>(null);
+
+  async function uploadLogo(file: File) {
+    setBrandMsg(null);
+    if (!file.type.startsWith("image/")) { setBrandMsg("Please choose an image file."); return; }
+    if (file.size > 2 * 1024 * 1024) { setBrandMsg("Logo must be under 2 MB."); return; }
+    setSavingBrand(true);
+    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+    const path = `logo-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("branding").upload(path, file, { upsert: true });
+    if (upErr) { setBrandMsg(upErr.message); setSavingBrand(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from("branding").getPublicUrl(path);
+    const { error } = await supabase.from("community_settings").update({ logo_url: publicUrl }).eq("id", true);
+    setSavingBrand(false);
+    if (error) { setBrandMsg(error.message); return; }
+    setBrandLogo(publicUrl);
+    setBrandMsg("Logo updated.");
+    router.refresh();
+  }
+
+  async function saveBrandName() {
+    setSavingBrand(true);
+    setBrandMsg(null);
+    const { error } = await supabase
+      .from("community_settings")
+      .update({ community_name: brandName.trim() || null })
+      .eq("id", true);
+    setSavingBrand(false);
+    if (error) { setBrandMsg(error.message); return; }
+    setBrandMsg("Saved.");
+    router.refresh();
+  }
 
   async function syncSetlists() {
     setSyncing(true);
@@ -760,6 +799,70 @@ export default function AdminHub({ mutedUsers, bannedUsers, appeals, flags, allU
                 >
                   {syncing ? "Syncing…" : "Sync now"}
                 </button>
+              </div>
+
+              {/* Church branding */}
+              <div
+                style={{
+                  padding: "16px 18px",
+                  marginTop: 14,
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
+                  Church branding
+                </p>
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
+                  Set your community&apos;s name and logo. These appear in the sidebar so the chat looks like your church.
+                </p>
+
+                <label className="ch-form-label">Community name</label>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", margin: "4px 0 16px" }}>
+                  <input
+                    className="ch-form-input"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    placeholder="e.g. Grace Community Church"
+                    style={{ flex: 1 }}
+                  />
+                  <button onClick={saveBrandName} disabled={savingBrand} style={{ ...btnNeutral, flexShrink: 0, padding: "7px 14px", cursor: savingBrand ? "default" : "pointer", opacity: savingBrand ? 0.6 : 1 }}>
+                    Save
+                  </button>
+                </div>
+
+                <label className="ch-form-label">Logo</label>
+                <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 6 }}>
+                  <div
+                    style={{
+                      width: 52, height: 52, borderRadius: 10, flexShrink: 0,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+                    }}
+                  >
+                    {brandLogo
+                      ? <img src={brandLogo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                      : <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>None</span>}
+                  </div>
+                  <label style={{ ...btnNeutral, padding: "7px 14px", cursor: savingBrand ? "default" : "pointer", opacity: savingBrand ? 0.6 : 1, display: "inline-block" }}>
+                    {savingBrand ? "Uploading…" : "Upload logo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      disabled={savingBrand}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }}
+                    />
+                  </label>
+                </div>
+
+                {brandMsg && (
+                  <p style={{ margin: "12px 0 0", fontSize: 12, color: /updated|Saved/.test(brandMsg) ? "#34c759" : ADMIN_RED }}>
+                    {brandMsg}
+                  </p>
+                )}
               </div>
             </div>
           )}

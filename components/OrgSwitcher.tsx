@@ -6,14 +6,12 @@ import type { Organization } from "@/lib/supabase/types";
 
 interface Props {
   orgs: Organization[];
-  isAdmin?: boolean;
-  onCreateOrg?: () => void;
 }
 
-export default function OrgSwitcher({ orgs, isAdmin, onCreateOrg }: Props) {
+export default function OrgSwitcher({ orgs }: Props) {
   const pathname = usePathname();
 
-  if (orgs.length === 0 && !isAdmin) return null;
+  if (orgs.length === 0) return null;
 
   const inOrg = pathname.startsWith("/org/");
   const activeSlug = inOrg ? pathname.split("/")[2] : null;
@@ -36,19 +34,6 @@ export default function OrgSwitcher({ orgs, isAdmin, onCreateOrg }: Props) {
           {org.name}
         </Link>
       ))}
-      {isAdmin && (
-        <button
-          className="org-pill org-pill-add"
-          onClick={onCreateOrg}
-          title="New organization"
-          aria-label="New organization"
-        >
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-            <path d="M6 1V11M1 6H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-          New Org
-        </button>
-      )}
     </div>
   );
 }

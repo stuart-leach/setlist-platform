@@ -59,7 +59,7 @@ export default async function CommunityLayout({
       .limit(20),
     supabase.from("community_roles").select("role").eq("user_id", user.id),
     supabase.from("organizations").select("*").order("name"),
-    supabase.from("community_settings").select("role_channels_enabled").maybeSingle(),
+    supabase.from("community_settings").select("role_channels_enabled, community_name, logo_url").maybeSingle(),
   ]);
 
   const channels = channelsResult.data ?? PREVIEW_CHANNELS;
@@ -83,6 +83,8 @@ export default async function CommunityLayout({
   const userOrgs: Organization[] = (orgsResult.data ?? []) as Organization[];
   // Default to enabled if the row/table isn't present yet (migration 021 not run).
   const roleChannelsEnabled: boolean = settingsResult.data?.role_channels_enabled ?? true;
+  const communityName: string | null = settingsResult.data?.community_name ?? null;
+  const logoUrl: string | null = settingsResult.data?.logo_url ?? null;
 
   return (
     <AnonymousAuthProvider
@@ -90,7 +92,7 @@ export default async function CommunityLayout({
       displayName={currentUser.display_name ?? null}
       hasRoles={userCommunityRoles.length > 0}
     >
-      <CommunityShell channels={channels} currentUser={currentUser} dmPartners={dmPartners} dmThreadIds={dmThreadIds} userCommunityRoles={userCommunityRoles} orgs={userOrgs} roleChannelsEnabled={roleChannelsEnabled}>
+      <CommunityShell channels={channels} currentUser={currentUser} dmPartners={dmPartners} dmThreadIds={dmThreadIds} userCommunityRoles={userCommunityRoles} orgs={userOrgs} roleChannelsEnabled={roleChannelsEnabled} communityName={communityName} logoUrl={logoUrl}>
         {children}
       </CommunityShell>
       <IntercomProvider

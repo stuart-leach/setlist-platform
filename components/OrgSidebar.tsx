@@ -184,7 +184,7 @@ export default function OrgSidebar({ org, channels, currentUser, allOrgs, member
     <>
       <aside className="sidebar">
         <div className="sidebar-header">
-          <OrgSwitcher orgs={allOrgs} isAdmin={isAdmin} onCreateOrg={() => {}} />
+          <OrgSwitcher orgs={allOrgs} />
           <button className="sidebar-collapse-btn" onClick={onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

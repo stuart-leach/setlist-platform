@@ -94,9 +94,9 @@ export interface Database {
         };
       };
       community_settings: {
-        Row: { id: boolean; role_channels_enabled: boolean; setlists_last_synced_at: string | null; updated_at: string; };
-        Insert: { id?: boolean; role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
-        Update: { role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
+        Row: { id: boolean; role_channels_enabled: boolean; setlists_last_synced_at: string | null; community_name: string | null; logo_url: string | null; updated_at: string; };
+        Insert: { id?: boolean; role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; community_name?: string | null; logo_url?: string | null; updated_at?: string; };
+        Update: { role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; community_name?: string | null; logo_url?: string | null; updated_at?: string; };
       };
       community_roles: {
         Row: { id: string; user_id: string; role: string; created_at: string; };

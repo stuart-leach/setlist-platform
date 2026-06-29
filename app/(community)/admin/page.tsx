@@ -52,7 +52,7 @@ export default async function AdminPage() {
       .select("id, username, display_name, avatar_url, role, is_banned, muted_until, created_at, community_roles(role)")
       .order("created_at", { ascending: false })
       .limit(500),
-    supabase.from("community_settings").select("role_channels_enabled, setlists_last_synced_at").maybeSingle(),
+    supabase.from("community_settings").select("role_channels_enabled, setlists_last_synced_at, community_name, logo_url").maybeSingle(),
   ]);
 
   const rawFlags = flagsResult.data ?? [];
@@ -90,6 +90,8 @@ export default async function AdminPage() {
       allUsers={peopleResult.data ?? []}
       roleChannelsEnabled={settingsResult.data?.role_channels_enabled ?? true}
       setlistsLastSyncedAt={settingsResult.data?.setlists_last_synced_at ?? null}
+      communityName={settingsResult.data?.community_name ?? null}
+      logoUrl={settingsResult.data?.logo_url ?? null}
     />
   );
 }

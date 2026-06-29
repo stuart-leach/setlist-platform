@@ -13,10 +13,12 @@ interface Props {
   userCommunityRoles: string[];
   orgs: Organization[];
   roleChannelsEnabled: boolean;
+  communityName: string | null;
+  logoUrl: string | null;
   children: React.ReactNode;
 }
 
-export default function CommunityShell({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, children }: Props) {
+export default function CommunityShell({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, children }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -29,6 +31,8 @@ export default function CommunityShell({ channels, currentUser, dmPartners, dmTh
         userCommunityRoles={userCommunityRoles}
         orgs={orgs}
         roleChannelsEnabled={roleChannelsEnabled}
+        communityName={communityName}
+        logoUrl={logoUrl}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
         onExpand={() => setCollapsed(false)}

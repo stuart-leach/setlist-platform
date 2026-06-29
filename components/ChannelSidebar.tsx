@@ -23,6 +23,8 @@ interface Props {
   userCommunityRoles: string[];
   orgs: Organization[];
   roleChannelsEnabled: boolean;
+  communityName: string | null;
+  logoUrl: string | null;
   collapsed: boolean;
   onCollapse: () => void;
   onExpand: () => void;
@@ -38,7 +40,7 @@ function applyOrder(channels: Channel[], order: string[]): Channel[] {
   });
 }
 
-export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, collapsed, onCollapse, onExpand }: Props) {
+export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, collapsed, onCollapse, onExpand }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -47,11 +49,6 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   const [newSetlistName, setNewSetlistName] = useState("");
   const [newSetlistError, setNewSetlistError] = useState("");
   const [savingSetlist, setSavingSetlist] = useState(false);
-  const [showNewOrg, setShowNewOrg] = useState(false);
-  const [newOrgName, setNewOrgName] = useState("");
-  const [newOrgSlug, setNewOrgSlug] = useState("");
-  const [newOrgError, setNewOrgError] = useState("");
-  const [newOrgLoading, setNewOrgLoading] = useState(false);
   const [profileModalUser, setProfileModalUser] = useState<Profile | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [localPartners, setLocalPartners] = useState<Profile[]>(dmPartners);
@@ -363,33 +360,6 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     if (data) router.push(`/channels/${slug}`);
   }
 
-  function toOrgSlug(s: string) {
-    return s.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-");
-  }
-
-  async function createOrg() {
-    const name = newOrgName.trim();
-    const slug = newOrgSlug.trim() || toOrgSlug(name);
-    if (!name) { setNewOrgError("Name is required."); return; }
-    if (!slug)  { setNewOrgError("Could not generate a slug."); return; }
-    setNewOrgLoading(true);
-    const { data: orgData, error } = await supabase
-      .from("organizations")
-      .insert({ name, slug })
-      .select()
-      .single();
-    setNewOrgLoading(false);
-    if (error) { setNewOrgError(error.message); return; }
-    // Generate a first invite link automatically
-    await supabase.from("organization_invites").insert({ org_id: orgData.id });
-    setShowNewOrg(false);
-    setNewOrgName("");
-    setNewOrgSlug("");
-    setNewOrgError("");
-    router.push(`/org/${slug}`);
-    router.refresh();
-  }
-
   // ── Mini-rail (collapsed) ────────────────────────────────────────────────────
   const dmActive = pathname.startsWith("/dm/");
   const roleActive = orderedRole.some((ch) => pathname === `/channels/${ch.slug}`);
@@ -408,12 +378,12 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
           <div className="mini-top">
             <button className="mini-expand-btn" onClick={onExpand} title="Expand sidebar" aria-label="Expand sidebar">
               <img
-                src="/Logo-Mark.png"
+                src={logoUrl ?? "/Logo-Mark.png"}
                 alt=""
                 className="mini-logo-mark"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextSibling as HTMLElement | null)?.removeAttribute("hidden"); }}
               />
-              <span className="mini-logo-fallback" hidden>MT</span>
+              <span className="mini-logo-fallback" hidden>{communityName?.[0]?.toUpperCase() ?? "MT"}</span>
             </button>
           </div>
 
@@ -558,8 +528,13 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     <>
       <aside className="sidebar">
         <div className="sidebar-header">
-          <img src="/logo.png" alt="MultiTracks" className="sidebar-logo-img" />
-          <OrgSwitcher orgs={orgs} isAdmin={isAdmin && !isPreview} onCreateOrg={() => { setNewOrgName(""); setNewOrgSlug(""); setNewOrgError(""); setShowNewOrg(true); }} />
+          {logoUrl ? (
+            <img src={logoUrl} alt={communityName ?? "Community logo"} className="sidebar-logo-img sidebar-logo-img--custom" />
+          ) : (
+            <img src="/logo.png" alt="MultiTracks" className="sidebar-logo-img" />
+          )}
+          {communityName && <span className="sidebar-community-name">{communityName}</span>}
+          <OrgSwitcher orgs={orgs} />
           <button className="sidebar-collapse-btn" onClick={onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -842,53 +817,6 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
           onClose={() => setProfileModalUser(null)}
           onUpdate={(updates) => setProfileModalUser((prev) => prev ? { ...prev, ...updates } : null)}
         />
-      )}
-
-      {/* New organization modal */}
-      {showNewOrg && (
-        <div className="modal-overlay" onClick={() => setShowNewOrg(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">New Organization</h2>
-              <button className="modal-close" onClick={() => setShowNewOrg(false)}>×</button>
-            </div>
-            <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
-              <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
-                Creates a private workspace. Only people you invite can access it.
-              </p>
-              <div className="ch-form-field">
-                <label className="ch-form-label">Organization Name</label>
-                <input
-                  className="ch-form-input"
-                  value={newOrgName}
-                  onChange={(e) => { setNewOrgName(e.target.value); setNewOrgSlug(toOrgSlug(e.target.value)); setNewOrgError(""); }}
-                  placeholder="e.g. My Church Team"
-                  autoFocus
-                />
-              </div>
-              <div className="ch-form-field">
-                <label className="ch-form-label">
-                  URL Slug <span style={{ color: "rgba(255,255,255,0.3)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(auto-generated)</span>
-                </label>
-                <div className="ch-form-slug-wrap">
-                  <span className="ch-form-slug-prefix">/org/</span>
-                  <input
-                    className="ch-form-input ch-form-input-slug"
-                    value={newOrgSlug}
-                    onChange={(e) => { setNewOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")); setNewOrgError(""); }}
-                  />
-                </div>
-              </div>
-              {newOrgError && <p className="ch-form-error">{newOrgError}</p>}
-              <div className="ch-form-actions">
-                <button className="ch-btn-primary" onClick={createOrg} disabled={newOrgLoading}>
-                  {newOrgLoading ? "Creating…" : "Create Organization"}
-                </button>
-                <button className="ch-btn-ghost" onClick={() => setShowNewOrg(false)}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
       {openMenuPartnerId && typeof document !== "undefined" && createPortal(

@@ -258,6 +258,24 @@ html, body {
   flex-shrink: 0;
 }
 
+/* Custom church logo can be a square mark — give it a touch more height */
+.sidebar-logo-img--custom {
+  height: 28px;
+  max-width: 130px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.sidebar-community-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
