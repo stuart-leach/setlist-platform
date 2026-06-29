@@ -11,6 +11,12 @@
 drop policy if exists "orgs_insert" on organizations;
 create policy "orgs_insert" on organizations for insert with check (auth.uid() is not null);
 
+-- Managers can change member roles within their org (020 had no UPDATE policy).
+drop policy if exists "org_members_update" on organization_members;
+create policy "org_members_update" on organization_members for update
+  using      (is_org_manager(org_id))
+  with check (is_org_manager(org_id));
+
 -- Owner-only helper (mirrors is_org_manager) for future owner-gated actions.
 create or replace function is_org_owner(p_org_id uuid)
 returns boolean

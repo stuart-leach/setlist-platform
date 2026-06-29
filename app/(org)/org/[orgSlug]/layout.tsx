@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import OrgShell from "@/components/OrgShell";
-import type { Organization, Channel } from "@/lib/supabase/types";
+import CommunityShell from "@/components/CommunityShell";
+import type { Organization, Channel, Profile } from "@/lib/supabase/types";
 
 interface Props {
   children: React.ReactNode;
@@ -15,63 +15,74 @@ export default async function OrgLayout({ children, params }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  if (!profile || profile.is_banned) redirect("/");
 
-  if (!profile || profile.is_banned) redirect("/channels/general");
-
-  // Fetch this org + verify user is a member (or platform admin)
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("*")
-    .eq("slug", orgSlug)
-    .single();
-
-  if (!org) redirect("/channels/general");
+  const { data: org } = await supabase.from("organizations").select("*").eq("slug", orgSlug).single();
+  if (!org) redirect("/");
 
   const { data: membership } = await supabase
     .from("organization_members")
     .select("role")
     .eq("org_id", org.id)
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
   // Non-members who aren't platform admins get bounced
-  if (!membership && profile.role !== "admin") redirect("/channels/general");
+  if (!membership && profile.role !== "admin") redirect("/");
 
-  // Fetch org channels + member count + all user orgs for switcher
-  const [channelsResult, memberCountResult, allOrgsResult] = await Promise.all([
+  const isManager =
+    membership?.role === "owner" || membership?.role === "admin" || profile.role === "admin";
+
+  const [channelsResult, dmThreadsResult, communityRolesResult, allOrgsResult, settingsResult] = await Promise.all([
+    supabase.from("channels").select("*").eq("org_id", org.id).order("name"),
     supabase
-      .from("channels")
-      .select("*")
-      .eq("org_id", org.id)
-      .order("name"),
-    supabase
-      .from("organization_members")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", org.id),
-    supabase
-      .from("organizations")
-      .select("*")
-      .order("name"),
+      .from("dm_threads")
+      .select("*, participant_a_profile:profiles!dm_threads_participant_a_fkey(*), participant_b_profile:profiles!dm_threads_participant_b_fkey(*)")
+      .or(`participant_a.eq.${user.id},participant_b.eq.${user.id}`)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase.from("community_roles").select("role").eq("user_id", user.id),
+    supabase.from("organizations").select("*").order("name"),
+    supabase.from("org_settings").select("role_channels_enabled").eq("org_id", org.id).maybeSingle(),
   ]);
 
   const channels = (channelsResult.data ?? []) as Channel[];
-  const memberCount = memberCountResult.count ?? 0;
   const allOrgs = (allOrgsResult.data ?? []) as Organization[];
+  const roleChannelsEnabled = settingsResult.data?.role_channels_enabled ?? true;
+
+  // DMs are global (cross-org) — same shape the community layout builds.
+  const threads = dmThreadsResult.data ?? [];
+  const dmPartners: Profile[] = threads.map((thread) => {
+    const isA = thread.participant_a === user.id;
+    return isA
+      ? (thread as unknown as Record<string, unknown>)["participant_b_profile"]
+      : (thread as unknown as Record<string, unknown>)["participant_a_profile"];
+  }).filter(Boolean) as Profile[];
+  const dmThreadIds: Record<string, string> = Object.fromEntries(threads.map((thread) => {
+    const partnerId = thread.participant_a === user.id ? thread.participant_b : thread.participant_a;
+    return [partnerId, thread.id];
+  }));
+  const userCommunityRoles: string[] = (communityRolesResult.data ?? []).map((r) => r.role);
 
   return (
-    <OrgShell
-      org={org as Organization}
+    <CommunityShell
       channels={channels}
       currentUser={profile}
-      allOrgs={allOrgs}
-      memberCount={memberCount}
+      dmPartners={dmPartners}
+      dmThreadIds={dmThreadIds}
+      userCommunityRoles={userCommunityRoles}
+      orgs={allOrgs}
+      roleChannelsEnabled={roleChannelsEnabled}
+      communityName={(org as Organization).name}
+      logoUrl={(org as Organization).logo_url}
+      basePath={`/org/${orgSlug}/channels`}
+      adminPath={`/org/${orgSlug}/admin`}
+      orgId={org.id}
+      canManage={isManager}
+      showAdminLink={isManager}
     >
       {children}
-    </OrgShell>
+    </CommunityShell>
   );
 }

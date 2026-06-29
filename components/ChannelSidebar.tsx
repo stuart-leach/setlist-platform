@@ -28,6 +28,12 @@ interface Props {
   collapsed: boolean;
   onCollapse: () => void;
   onExpand: () => void;
+  // Org-aware context (community defaults preserve existing behavior)
+  basePath?: string;       // channel link prefix, e.g. "/org/{slug}/channels"
+  adminPath?: string;      // admin hub link, e.g. "/org/{slug}/admin"
+  orgId?: string | null;   // org that new setlist/channels belong to
+  canManage?: boolean;     // can create setlists / manage (default: admin or moderator)
+  showAdminLink?: boolean; // show the Admin Hub link (default: platform admin)
 }
 
 function applyOrder(channels: Channel[], order: string[]): Channel[] {
@@ -40,10 +46,11 @@ function applyOrder(channels: Channel[], order: string[]): Channel[] {
   });
 }
 
-export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, collapsed, onCollapse, onExpand }: Props) {
+export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, collapsed, onCollapse, onExpand, basePath = "/channels", adminPath = "/admin", orgId = null, canManage, showAdminLink }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const chHref = (slug: string) => `${basePath}/${slug}`;
   const [showNewDm, setShowNewDm] = useState(false);
   const [showNewSetlist, setShowNewSetlist] = useState(false);
   const [newSetlistName, setNewSetlistName] = useState("");
@@ -60,6 +67,9 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   const canModerate = currentUser.role === "admin" || currentUser.role === "moderator";
   const isAdmin = currentUser.role === "admin";
   const isPreview = currentUser.id === "preview-user-id";
+  // Org-action gating: explicit props in org context, community defaults otherwise.
+  const manage = canManage ?? canModerate;
+  const adminLinkVisible = showAdminLink ?? isAdmin;
 
   // ── Unread tracking ─────────────────────────────────────────────────────────
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map()); // slug → count
@@ -67,8 +77,8 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   const currentSlugRef = useRef<string | null>(null);
   const channelIdToSlugRef = useRef<Map<string, string>>(new Map());
   const threadToPartnerRef = useRef<Map<string, string>>(new Map()); // threadId → partnerId
-  const currentSlug = pathname.startsWith("/channels/")
-    ? (pathname.split("/channels/")[1]?.split("?")[0] ?? null)
+  const currentSlug = pathname.startsWith(`${basePath}/`)
+    ? (pathname.split(`${basePath}/`)[1]?.split("?")[0] ?? null)
     : null;
   const currentDmPartnerId = pathname.startsWith("/dm/")
     ? (pathname.split("/dm/")[1]?.split("?")[0] ?? null)
@@ -119,7 +129,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     if (db) return 1;
     return (b.created_at ?? "").localeCompare(a.created_at ?? "");
   });
-  const canManageSetlists = canModerate && !isPreview;
+  const canManageSetlists = manage && !isPreview;
   const [savedOrder, setSavedOrder] = useState<{ general_order: string[]; role_order: string[] }>({
     general_order: [],
     role_order: [],
@@ -307,7 +317,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     if (!threadId) return;
     setLocalPartners((prev) => prev.filter((p) => p.id !== partnerId));
     await supabase.from("dm_threads").delete().eq("id", threadId);
-    if (pathname === `/dm/${partnerId}`) router.push("/channels/general");
+    if (pathname === `/dm/${partnerId}`) router.push(orderedGeneral[0] ? chHref(orderedGeneral[0].slug) : basePath);
   }
 
   async function handleMute(partnerId: string, ms: number) {
@@ -348,6 +358,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
       channel_type: "setlist",
       required_role: null,
       locked: false,
+      org_id: orgId,
     }).select().single();
     setSavingSetlist(false);
 
@@ -357,14 +368,14 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     setNewSetlistName("");
     setNewSetlistError("");
     router.refresh();
-    if (data) router.push(`/channels/${slug}`);
+    if (data) router.push(chHref(slug));
   }
 
   // ── Mini-rail (collapsed) ────────────────────────────────────────────────────
   const dmActive = pathname.startsWith("/dm/");
-  const roleActive = orderedRole.some((ch) => pathname === `/channels/${ch.slug}`);
-  const channelActive = orderedGeneral.some((ch) => pathname === `/channels/${ch.slug}`);
-  const setlistActive = setlists.some((ch) => pathname === `/channels/${ch.slug}`);
+  const roleActive = orderedRole.some((ch) => pathname === chHref(ch.slug));
+  const channelActive = orderedGeneral.some((ch) => pathname === chHref(ch.slug));
+  const setlistActive = setlists.some((ch) => pathname === chHref(ch.slug));
   const showRoleChannels = roleChannelsEnabled && orderedRole.length > 0;
   const totalUnreadGeneral = orderedGeneral.reduce((sum, ch) => sum + (unreadCounts.get(ch.slug) ?? 0), 0);
   const totalUnreadSetlist = setlists.reduce((sum, ch) => sum + (unreadCounts.get(ch.slug) ?? 0), 0);
@@ -389,7 +400,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
 
           <nav className="mini-nav">
             <div className="mini-nav-wrap">
-              <Link href="/channels/general" className={`mini-nav-item${channelActive ? " active" : ""}`}>
+              <Link href={orderedGeneral[0] ? chHref(orderedGeneral[0].slug) : basePath} className={`mini-nav-item${channelActive ? " active" : ""}`}>
                 <span style={{ position: "relative", display: "inline-flex" }}>
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                     <path d="M8 2L6 18M14 2L12 18M3 7.5H18M3 12.5H18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
@@ -405,7 +416,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                 {orderedGeneral.map((ch) => {
                   const count = unreadCounts.get(ch.slug) ?? 0;
                   return (
-                    <Link key={ch.id} href={`/channels/${ch.slug}`} className={`mini-flyout-item${pathname === `/channels/${ch.slug}` ? " active" : ""}`}>
+                    <Link key={ch.id} href={chHref(ch.slug)} className={`mini-flyout-item${pathname === chHref(ch.slug) ? " active" : ""}`}>
                       <span className="mini-flyout-hash">#</span>{ch.name}
                       {count > 0 && <span className="mini-flyout-unread-badge">{count > 99 ? "99+" : count}</span>}
                     </Link>
@@ -432,7 +443,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                   {setlists.map((ch) => {
                     const count = unreadCounts.get(ch.slug) ?? 0;
                     return (
-                      <Link key={ch.id} href={`/channels/${ch.slug}`} className={`mini-flyout-item${pathname === `/channels/${ch.slug}` ? " active" : ""}`}>
+                      <Link key={ch.id} href={chHref(ch.slug)} className={`mini-flyout-item${pathname === chHref(ch.slug) ? " active" : ""}`}>
                         <span className="mini-flyout-hash">#</span>{ch.name}
                         {count > 0 && <span className="mini-flyout-unread-badge">{count > 99 ? "99+" : count}</span>}
                       </Link>
@@ -460,7 +471,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                   {orderedRole.map((ch) => {
                     const count = unreadCounts.get(ch.slug) ?? 0;
                     return (
-                      <Link key={ch.id} href={`/channels/${ch.slug}`} className={`mini-flyout-item${pathname === `/channels/${ch.slug}` ? " active" : ""}`}>
+                      <Link key={ch.id} href={chHref(ch.slug)} className={`mini-flyout-item${pathname === chHref(ch.slug) ? " active" : ""}`}>
                         <span className="mini-flyout-hash">#</span>{ch.name}
                         {count > 0 && <span className="mini-flyout-unread-badge">{count > 99 ? "99+" : count}</span>}
                       </Link>
@@ -486,11 +497,11 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
           </nav>
 
           {/* Admin — pinned to the bottom just above the avatar, mirrors full sidebar */}
-          {isAdmin && (
+          {adminLinkVisible && (
             <div className="mini-admin-bottom">
               <Link
-                href="/admin"
-                className={`mini-nav-item mini-nav-item--admin${pathname === "/admin" ? " active" : ""}`}
+                href={adminPath}
+                className={`mini-nav-item mini-nav-item--admin${pathname === adminPath ? " active" : ""}`}
                 title="Admin Hub"
                 aria-label="Admin Hub"
               >
@@ -547,7 +558,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
             <span className="sidebar-section-label">General</span>
           </div>
           {orderedGeneral.map((ch, index) => {
-            const active = pathname === `/channels/${ch.slug}`;
+            const active = pathname === chHref(ch.slug);
             const isDragging = dragging?.type === "general" && dragging.index === index;
             const isDragOver = dragOver?.type === "general" && dragOver.index === index;
             return (
@@ -560,7 +571,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                 onDragEnd={() => { setDragging(null); setDragOver(null); }}
                 className={`sidebar-drag-row${isDragging ? " dragging" : ""}${isDragOver ? " drag-over" : ""}`}
               >
-                <Link href={`/channels/${ch.slug}`} className={`sidebar-item${active ? " active" : ""}`}>
+                <Link href={chHref(ch.slug)} className={`sidebar-item${active ? " active" : ""}`}>
                   {ch.locked ? (
                     <svg className="sidebar-lock" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="7" width="10" height="7" rx="1.5"/>
@@ -604,9 +615,9 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
             )}
           </div>
           {setlists.map((ch) => {
-            const active = pathname === `/channels/${ch.slug}`;
+            const active = pathname === chHref(ch.slug);
             return (
-              <Link key={ch.id} href={`/channels/${ch.slug}`} className={`sidebar-item${active ? " active" : ""}`}>
+              <Link key={ch.id} href={chHref(ch.slug)} className={`sidebar-item${active ? " active" : ""}`}>
                 <span className="sidebar-hash">#</span>
                 {ch.name}
                 {(unreadCounts.get(ch.slug) ?? 0) > 0 && (
@@ -626,7 +637,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
               <div className="sidebar-separator" />
               <p className="sidebar-section-label">Role Channels</p>
               {orderedRole.map((ch, index) => {
-                const active = pathname === `/channels/${ch.slug}`;
+                const active = pathname === chHref(ch.slug);
                 const isDragging = dragging?.type === "role" && dragging.index === index;
                 const isDragOver = dragOver?.type === "role" && dragOver.index === index;
                 return (
@@ -639,7 +650,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                     onDragEnd={() => { setDragging(null); setDragOver(null); }}
                     className={`sidebar-drag-row${isDragging ? " dragging" : ""}${isDragOver ? " drag-over" : ""}`}
                   >
-                    <Link href={`/channels/${ch.slug}`} className={`sidebar-item${active ? " active" : ""}`}>
+                    <Link href={chHref(ch.slug)} className={`sidebar-item${active ? " active" : ""}`}>
                       <span className="sidebar-hash">#</span>
                       {ch.name}
                       {(unreadCounts.get(ch.slug) ?? 0) > 0 && (
@@ -712,10 +723,10 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
         </nav>
 
         {/* Admin link — only visible to admins, sits just above the footer */}
-        {isAdmin && (
+        {adminLinkVisible && (
           <Link
-            href="/admin"
-            className={`sidebar-admin-link${pathname === "/admin" ? " active" : ""}`}
+            href={adminPath}
+            className={`sidebar-admin-link${pathname === adminPath ? " active" : ""}`}
           >
             <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
