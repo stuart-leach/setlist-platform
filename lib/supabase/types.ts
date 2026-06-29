@@ -94,9 +94,14 @@ export interface Database {
         };
       };
       mt_connection: {
-        Row: { id: boolean; session_hash: string | null; customer_id: number | null; user_access_id: number | null; connected_email: string | null; connected_at: string | null; last_error: string | null; };
-        Insert: { id?: boolean; session_hash?: string | null; customer_id?: number | null; user_access_id?: number | null; connected_email?: string | null; connected_at?: string | null; last_error?: string | null; };
-        Update: { session_hash?: string | null; customer_id?: number | null; user_access_id?: number | null; connected_email?: string | null; connected_at?: string | null; last_error?: string | null; };
+        Row: { id: boolean; org_id: string | null; session_hash: string | null; customer_id: number | null; user_access_id: number | null; connected_email: string | null; connected_at: string | null; last_error: string | null; };
+        Insert: { id?: boolean; org_id?: string | null; session_hash?: string | null; customer_id?: number | null; user_access_id?: number | null; connected_email?: string | null; connected_at?: string | null; last_error?: string | null; };
+        Update: { org_id?: string | null; session_hash?: string | null; customer_id?: number | null; user_access_id?: number | null; connected_email?: string | null; connected_at?: string | null; last_error?: string | null; };
+      };
+      org_settings: {
+        Row: { org_id: string; role_channels_enabled: boolean; setlists_last_synced_at: string | null; updated_at: string; };
+        Insert: { org_id: string; role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
+        Update: { role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
       };
       community_settings: {
         Row: { id: boolean; role_channels_enabled: boolean; setlists_last_synced_at: string | null; community_name: string | null; logo_url: string | null; updated_at: string; };
