@@ -27,13 +27,14 @@ export default async function OrgAdminPage({ params }: Props) {
     membership?.role === "owner" || membership?.role === "admin" || profile?.role === "admin";
   if (!isManager) redirect(`/org/${orgSlug}`);
 
-  const [settingsResult, membersResult, inviteResult] = await Promise.all([
+  const [settingsResult, membersResult, inviteResult, channelsResult] = await Promise.all([
     supabase.from("org_settings").select("role_channels_enabled, setlists_last_synced_at").eq("org_id", org.id).maybeSingle(),
     supabase
       .from("organization_members")
       .select("role, user_id, joined_at, profiles(id, username, display_name, avatar_url)")
       .eq("org_id", org.id),
     supabase.from("organization_invites").select("token").eq("org_id", org.id).maybeSingle(),
+    supabase.from("channels").select("*").eq("org_id", org.id).order("name"),
   ]);
 
   // MultiTracks connection status (service role — table is locked to clients).
@@ -51,6 +52,7 @@ export default async function OrgAdminPage({ params }: Props) {
       roleChannelsEnabled={settingsResult.data?.role_channels_enabled ?? true}
       setlistsLastSyncedAt={settingsResult.data?.setlists_last_synced_at ?? null}
       members={(membersResult.data ?? []) as any[]}
+      channels={(channelsResult.data ?? []) as any[]}
       inviteToken={inviteResult.data?.token ?? null}
       mtConnectedEmail={mtConn?.connected_email ?? null}
       mtConnectedAt={mtConn?.connected_at ?? null}

@@ -56,6 +56,10 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   const [newSetlistName, setNewSetlistName] = useState("");
   const [newSetlistError, setNewSetlistError] = useState("");
   const [savingSetlist, setSavingSetlist] = useState(false);
+  const [showNewChannel, setShowNewChannel] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelError, setNewChannelError] = useState("");
+  const [savingChannel, setSavingChannel] = useState(false);
   const [profileModalUser, setProfileModalUser] = useState<Profile | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [localPartners, setLocalPartners] = useState<Profile[]>(dmPartners);
@@ -371,6 +375,35 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     if (data) router.push(chHref(slug));
   }
 
+  async function saveNewChannel() {
+    const name = newChannelName.trim();
+    if (!name) { setNewChannelError("Channel name is required."); return; }
+    const baseSlug = toSlug(name);
+    if (!baseSlug) { setNewChannelError("Please use letters or numbers in the name."); return; }
+    const existing = new Set(channels.map((c) => c.slug));
+    let slug = baseSlug;
+    for (let i = 2; existing.has(slug); i++) slug = `${baseSlug}-${i}`;
+
+    setSavingChannel(true);
+    const { data, error } = await supabase.from("channels").insert({
+      name,
+      slug,
+      channel_type: "general",
+      required_role: null,
+      locked: false,
+      org_id: orgId,
+    }).select().single();
+    setSavingChannel(false);
+
+    if (error) { setNewChannelError(error.message); return; }
+
+    setShowNewChannel(false);
+    setNewChannelName("");
+    setNewChannelError("");
+    router.refresh();
+    if (data) router.push(chHref(slug));
+  }
+
   // ── Mini-rail (collapsed) ────────────────────────────────────────────────────
   const dmActive = pathname.startsWith("/dm/");
   const roleActive = orderedRole.some((ch) => pathname === chHref(ch.slug));
@@ -556,6 +589,18 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
         <nav className="sidebar-nav">
           <div className="sidebar-section-row">
             <span className="sidebar-section-label">General</span>
+            {canManageSetlists && (
+              <button
+                className="sidebar-new-dm-btn"
+                onClick={() => { setNewChannelName(""); setNewChannelError(""); setShowNewChannel(true); }}
+                title="New channel"
+                aria-label="New channel"
+              >
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
           </div>
           {orderedGeneral.map((ch, index) => {
             const active = pathname === chHref(ch.slug);
@@ -814,6 +859,40 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                   {savingSetlist ? "Creating…" : "Create Setlist"}
                 </button>
                 <button className="ch-btn-ghost" onClick={() => setShowNewSetlist(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewChannel && (
+        <div className="modal-overlay" onClick={() => setShowNewChannel(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">New Channel</h2>
+              <button className="modal-close" onClick={() => setShowNewChannel(false)}>×</button>
+            </div>
+            <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
+                Adds a channel to the General section. You can rename or remove it later.
+              </p>
+              <div className="ch-form-field">
+                <label className="ch-form-label">Channel Name</label>
+                <input
+                  className="ch-form-input"
+                  value={newChannelName}
+                  onChange={(e) => { setNewChannelName(e.target.value); setNewChannelError(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !savingChannel) saveNewChannel(); }}
+                  placeholder="e.g. Prayer Requests"
+                  autoFocus
+                />
+              </div>
+              {newChannelError && <p className="ch-form-error">{newChannelError}</p>}
+              <div className="ch-form-actions">
+                <button className="ch-btn-primary" onClick={saveNewChannel} disabled={savingChannel}>
+                  {savingChannel ? "Creating…" : "Create Channel"}
+                </button>
+                <button className="ch-btn-ghost" onClick={() => setShowNewChannel(false)}>Cancel</button>
               </div>
             </div>
           </div>

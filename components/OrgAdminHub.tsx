@@ -35,12 +35,22 @@ interface Member {
   profiles: Profile;
 }
 
+interface ChannelRow {
+  id: string;
+  slug: string;
+  name: string;
+  channel_type: string | null;
+  required_role: string[] | null;
+  mt_setlist_id: number | null;
+}
+
 interface Props {
   org: Organization;
   myRole: string;
   roleChannelsEnabled: boolean;
   setlistsLastSyncedAt: string | null;
   members: Member[];
+  channels: ChannelRow[];
   inviteToken: string | null;
   mtConnectedEmail: string | null;
   mtConnectedAt: string | null;
@@ -51,8 +61,71 @@ export default function OrgAdminHub(props: Props) {
   const { org } = props;
   const router = useRouter();
   const supabase = createClient();
-  const [tab, setTab] = useState<"settings" | "members">("settings");
+  const [tab, setTab] = useState<"settings" | "channels" | "members">("settings");
   const isOwner = props.myRole === "owner";
+
+  // ── Channels management ──────────────────────────────────────────────────────
+  const [channels, setChannels] = useState<ChannelRow[]>(props.channels);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [newChName, setNewChName] = useState("");
+  const [chErr, setChErr] = useState<string | null>(null);
+
+  const general = channels.filter((c) => (c.channel_type ?? "general") === "general");
+  const setlistCh = channels.filter((c) => c.channel_type === "setlist");
+  const roleCh = channels.filter((c) => c.channel_type === "role" || (c.required_role?.length ?? 0) > 0);
+
+  function slugify(s: string) {
+    return s.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-");
+  }
+  async function renameChannel(id: string) {
+    const name = editName.trim();
+    setEditingId(null);
+    if (!name) return;
+    setChannels((cs) => cs.map((c) => c.id === id ? { ...c, name } : c));
+    await supabase.from("channels").update({ name }).eq("id", id);
+    router.refresh();
+  }
+  async function deleteChannel(id: string) {
+    setChannels((cs) => cs.filter((c) => c.id !== id));
+    await supabase.from("channels").delete().eq("id", id);
+    router.refresh();
+  }
+  async function addGeneralChannel() {
+    const name = newChName.trim();
+    if (!name) return;
+    setChErr(null);
+    const base = slugify(name) || "channel";
+    const existing = new Set(channels.map((c) => c.slug));
+    let slug = base;
+    for (let i = 2; existing.has(slug); i++) slug = `${base}-${i}`;
+    const { data, error } = await supabase.from("channels")
+      .insert({ name, slug, channel_type: "general", required_role: null, locked: false, org_id: org.id })
+      .select().single();
+    if (error) { setChErr(error.message); return; }
+    if (data) setChannels((cs) => [...cs, data as ChannelRow]);
+    setNewChName("");
+    router.refresh();
+  }
+
+  const channelRow = (c: ChannelRow) => (
+    <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+      <span style={{ color: "rgba(255,255,255,0.35)" }}>#</span>
+      {editingId === c.id ? (
+        <input className="ch-form-input" autoFocus value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") renameChannel(c.id); if (e.key === "Escape") setEditingId(null); }}
+          onBlur={() => renameChannel(c.id)} style={{ flex: 1, padding: "4px 8px" }} />
+      ) : (
+        <span style={{ flex: 1, fontSize: 14 }}>{c.name}</span>
+      )}
+      {c.required_role?.length ? (
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{c.required_role.join(", ")}</span>
+      ) : null}
+      <button onClick={() => { setEditingId(c.id); setEditName(c.name); }} style={{ ...btn, background: "transparent", padding: "4px 8px" }}>Rename</button>
+      <button onClick={() => deleteChannel(c.id)} style={{ ...btn, background: "transparent", color: RED, padding: "4px 8px" }}>Delete</button>
+    </div>
+  );
 
   // Branding
   const [name, setName] = useState(org.name);
@@ -162,12 +235,12 @@ export default function OrgAdminHub(props: Props) {
     <div style={{ padding: "28px 32px", maxWidth: 760, margin: "0 auto", color: "#fff" }}>
       <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{org.name} — Settings</h1>
       <div style={{ display: "flex", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.1)", margin: "18px 0 8px" }}>
-        {(["settings", "members"] as const).map((t) => (
+        {(["settings", "channels", "members"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             background: "none", border: "none", color: tab === t ? "#fff" : "rgba(255,255,255,0.5)",
             borderBottom: tab === t ? "2px solid #fff" : "2px solid transparent",
             padding: "8px 2px", fontSize: 14, fontWeight: 600, cursor: "pointer", textTransform: "capitalize",
-          }}>{t}{t === "members" ? ` (${members.length})` : ""}</button>
+          }}>{t}{t === "members" ? ` (${members.length})` : t === "channels" ? ` (${channels.length})` : ""}</button>
         ))}
       </div>
 
@@ -239,6 +312,33 @@ export default function OrgAdminHub(props: Props) {
               {syncMsg && <p style={{ margin: "8px 0 0", fontSize: 12, color: syncMsg.startsWith("Synced") ? GREEN : RED }}>{syncMsg}</p>}
             </div>
             <button onClick={syncNow} disabled={syncing} style={{ ...btn, marginTop: 2 }}>{syncing ? "Syncing…" : "Sync now"}</button>
+          </div>
+        </div>
+      )}
+
+      {tab === "channels" && (
+        <div>
+          <div style={card}>
+            <p style={{ margin: "0 0 4px", fontWeight: 600 }}>General channels</p>
+            <p style={{ margin: "0 0 4px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Shown in the General section of the sidebar.</p>
+            {general.map(channelRow)}
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              <input className="ch-form-input" value={newChName} onChange={(e) => { setNewChName(e.target.value); setChErr(null); }} onKeyDown={(e) => { if (e.key === "Enter") addGeneralChannel(); }} placeholder="New channel name" style={{ flex: 1 }} />
+              <button onClick={addGeneralChannel} style={btn}>Add</button>
+            </div>
+            {chErr && <p style={{ margin: "8px 0 0", fontSize: 12, color: RED }}>{chErr}</p>}
+          </div>
+
+          <div style={card}>
+            <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Setlist channels</p>
+            <p style={{ margin: "0 0 4px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Auto-created from MultiTracks. A synced setlist you delete will return on the next sync if it&apos;s still upcoming.</p>
+            {setlistCh.length ? setlistCh.map(channelRow) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>None yet.</p>}
+          </div>
+
+          <div style={card}>
+            <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Role channels</p>
+            <p style={{ margin: "0 0 4px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Visible only to members with the matching role.</p>
+            {roleCh.length ? roleCh.map(channelRow) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>None yet.</p>}
           </div>
         </div>
       )}
