@@ -108,6 +108,11 @@ export interface Database {
         Insert: { id?: string; org_id: string; key: string; label: string; created_at?: string; };
         Update: { key?: string; label?: string; };
       };
+      organization_members: {
+        Row: { org_id: string; user_id: string; role: string; joined_at: string; is_banned: boolean; muted_until: string | null; admin_note: string | null; };
+        Insert: { org_id: string; user_id: string; role?: string; joined_at?: string; is_banned?: boolean; muted_until?: string | null; admin_note?: string | null; };
+        Update: { role?: string; is_banned?: boolean; muted_until?: string | null; admin_note?: string | null; };
+      };
       org_member_roles: {
         Row: { org_id: string; user_id: string; role_key: string; };
         Insert: { org_id: string; user_id: string; role_key: string; };

@@ -8,13 +8,16 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  // RLS returns only orgs the user belongs to (or all, for a platform admin).
-  const { data: orgs } = await supabase
-    .from("organizations")
-    .select("slug")
-    .order("created_at", { ascending: true })
+  // First org the user is a (non-banned) member of.
+  const { data: memberships } = await supabase
+    .from("organization_members")
+    .select("joined_at, organizations(slug)")
+    .eq("user_id", user.id)
+    .eq("is_banned", false)
+    .order("joined_at", { ascending: true })
     .limit(1);
 
-  if (orgs && orgs.length > 0) redirect(`/org/${orgs[0].slug}`);
+  const slug = (memberships?.[0] as any)?.organizations?.slug;
+  if (slug) redirect(`/org/${slug}`);
   redirect("/onboarding");
 }

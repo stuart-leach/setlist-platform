@@ -39,13 +39,32 @@ export default async function OrgAdminPage({ params }: Props) {
     supabase.from("org_member_roles").select("user_id, role_key").eq("org_id", org.id),
   ]);
 
-  // MultiTracks connection status (service role — table is locked to clients).
+  // Service-role reads (caller already verified as a manager above).
   const serviceDb = await createServiceClient();
   const { data: mtConn } = await serviceDb
     .from("mt_connection")
     .select("connected_email, connected_at, last_error")
     .eq("org_id", org.id)
     .maybeSingle();
+
+  // ── Per-org moderation data ────────────────────────────────────────────────
+  const nowIso = new Date().toISOString();
+  const [bannedRes, mutedRes, appealsRes, flagsRes] = await Promise.all([
+    serviceDb.from("organization_members")
+      .select("user_id, admin_note, profiles(id, username, display_name, avatar_url)")
+      .eq("org_id", org.id).eq("is_banned", true),
+    serviceDb.from("organization_members")
+      .select("user_id, muted_until, profiles(id, username, display_name, avatar_url)")
+      .eq("org_id", org.id).not("muted_until", "is", null).gt("muted_until", nowIso),
+    serviceDb.from("ban_appeals")
+      .select("id, user_id, content, created_at, profiles(id, username, display_name, avatar_url)")
+      .eq("org_id", org.id).eq("status", "pending").order("created_at", { ascending: false }),
+    serviceDb.from("message_flags")
+      .select("id, message_id, created_at, reason, messages!inner(id, content, channel_id, channels!inner(org_id, name, slug), author:profiles(id, username, display_name, avatar_url))")
+      .eq("messages.channels.org_id", org.id)
+      .order("created_at", { ascending: false })
+      .limit(100),
+  ]);
 
   return (
     <OrgAdminHub
@@ -58,6 +77,10 @@ export default async function OrgAdminPage({ params }: Props) {
       channels={(channelsResult.data ?? []) as any[]}
       roles={(rolesResult.data ?? []) as any[]}
       memberRoles={(memberRolesResult.data ?? []) as any[]}
+      banned={(bannedRes.data ?? []) as any[]}
+      muted={(mutedRes.data ?? []) as any[]}
+      appeals={(appealsRes.data ?? []) as any[]}
+      flags={(flagsRes.data ?? []) as any[]}
       inviteToken={inviteResult.data?.token ?? null}
       mtConnectedEmail={mtConn?.connected_email ?? null}
       mtConnectedAt={mtConn?.connected_at ?? null}

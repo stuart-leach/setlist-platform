@@ -25,16 +25,20 @@ export default async function OrgChannelPage({ params }: Props) {
 
   if (!org) notFound();
 
-  const [channelResult, profileResult] = await Promise.all([
+  const [channelResult, profileResult, membershipResult] = await Promise.all([
     supabase.from("channels").select("*").eq("slug", slug).eq("org_id", org.id).single(),
-    supabase.from("profiles").select("role, muted_until").eq("id", user.id).single(),
+    supabase.from("profiles").select("role").eq("id", user.id).single(),
+    supabase.from("organization_members").select("role, muted_until").eq("org_id", org.id).eq("user_id", user.id).maybeSingle(),
   ]);
 
   const channel = channelResult.data;
   if (!channel) notFound();
 
-  const currentUserRole = profileResult.data?.role ?? "member";
-  const currentUserMutedUntil = profileResult.data?.muted_until ?? null;
+  // Posting permission uses the org membership role; mute is per-org.
+  const currentUserRole = membershipResult.data?.role === "owner" || membershipResult.data?.role === "admin"
+    ? "admin"
+    : (profileResult.data?.role ?? "member");
+  const currentUserMutedUntil = membershipResult.data?.muted_until ?? null;
 
   const { data: messages } = await supabase
     .from("messages")

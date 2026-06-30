@@ -16,20 +16,34 @@ export default async function OrgLayout({ children, params }: Props) {
   if (!user) redirect("/auth/login");
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  if (!profile || profile.is_banned) redirect("/");
+  if (!profile) redirect("/");
 
   const { data: org } = await supabase.from("organizations").select("*").eq("slug", orgSlug).single();
   if (!org) redirect("/");
 
   const { data: membership } = await supabase
     .from("organization_members")
-    .select("role")
+    .select("role, is_banned")
     .eq("org_id", org.id)
     .eq("user_id", user.id)
     .maybeSingle();
 
   // Non-members who aren't platform admins get bounced
   if (!membership && profile.role !== "admin") redirect("/");
+
+  // Banned from THIS org — show a notice instead of the workspace (no redirect
+  // loop, and they keep access to any other orgs).
+  if (membership?.is_banned) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0a", color: "#fff", padding: 24 }}>
+        <div style={{ maxWidth: 420, textAlign: "center" }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 8px" }}>You no longer have access to {org.name}</h1>
+          <p style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", margin: "0 0 20px" }}>An admin of this organization removed your access. You can still use your other organizations.</p>
+          <a href="/" style={{ color: "#fff", fontSize: 14 }}>← Back to your organizations</a>
+        </div>
+      </div>
+    );
+  }
 
   const isManager =
     membership?.role === "owner" || membership?.role === "admin" || profile.role === "admin";

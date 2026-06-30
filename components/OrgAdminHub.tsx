@@ -60,6 +60,10 @@ interface Props {
   channels: ChannelRow[];
   roles: OrgRole[];
   memberRoles: { user_id: string; role_key: string }[];
+  banned: any[];
+  muted: any[];
+  appeals: any[];
+  flags: any[];
   inviteToken: string | null;
   mtConnectedEmail: string | null;
   mtConnectedAt: string | null;
@@ -70,8 +74,36 @@ export default function OrgAdminHub(props: Props) {
   const { org } = props;
   const router = useRouter();
   const supabase = createClient();
-  const [tab, setTab] = useState<"settings" | "channels" | "members">("settings");
+  const [tab, setTab] = useState<"settings" | "channels" | "members" | "moderation">("settings");
   const isOwner = props.myRole === "owner";
+
+  // ── Moderation ───────────────────────────────────────────────────────────────
+  const [banned, setBanned] = useState<any[]>(props.banned);
+  const [muted, setMuted] = useState<any[]>(props.muted);
+  const [appeals, setAppeals] = useState<any[]>(props.appeals);
+  const [flags, setFlags] = useState<any[]>(props.flags);
+  const modCount = banned.length + muted.length + appeals.length + flags.length;
+
+  async function unban(userId: string) {
+    setBanned((b) => b.filter((x) => x.user_id !== userId));
+    await supabase.from("organization_members").update({ is_banned: false, admin_note: null }).eq("org_id", org.id).eq("user_id", userId);
+    router.refresh();
+  }
+  async function unmute(userId: string) {
+    setMuted((m) => m.filter((x) => x.user_id !== userId));
+    await supabase.from("organization_members").update({ muted_until: null }).eq("org_id", org.id).eq("user_id", userId);
+    router.refresh();
+  }
+  async function dismissFlag(id: string) {
+    setFlags((f) => f.filter((x) => x.id !== id));
+    await fetch("/api/org-moderation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ org: org.id, action: "dismissFlag", id }) });
+    router.refresh();
+  }
+  async function resolveAppeal(id: string, status: "approved" | "rejected") {
+    setAppeals((a) => a.filter((x) => x.id !== id));
+    await fetch("/api/org-moderation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ org: org.id, action: "resolveAppeal", id, status }) });
+    router.refresh();
+  }
 
   // ── Channels management ──────────────────────────────────────────────────────
   const [channels, setChannels] = useState<ChannelRow[]>(props.channels);
@@ -290,21 +322,14 @@ export default function OrgAdminHub(props: Props) {
   return (
     <div style={{ height: "100%", overflowY: "auto" }}>
     <div style={{ padding: "28px 32px", maxWidth: 760, margin: "0 auto", color: "#fff" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{org.name} — Settings</h1>
-        {props.isPlatformAdmin && (
-          <a href="/admin" style={{ fontSize: 13, color: "#ff453a", textDecoration: "none", whiteSpace: "nowrap" }}>
-            Platform moderation →
-          </a>
-        )}
-      </div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{org.name} — Settings</h1>
       <div style={{ display: "flex", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.1)", margin: "18px 0 8px" }}>
-        {(["settings", "channels", "members"] as const).map((t) => (
+        {(["settings", "channels", "members", "moderation"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             background: "none", border: "none", color: tab === t ? "#fff" : "rgba(255,255,255,0.5)",
             borderBottom: tab === t ? "2px solid #fff" : "2px solid transparent",
             padding: "8px 2px", fontSize: 14, fontWeight: 600, cursor: "pointer", textTransform: "capitalize",
-          }}>{t}{t === "members" ? ` (${members.length})` : t === "channels" ? ` (${channels.length})` : ""}</button>
+          }}>{t}{t === "members" ? ` (${members.length})` : t === "channels" ? ` (${channels.length})` : t === "moderation" && modCount ? ` (${modCount})` : ""}</button>
         ))}
       </div>
 
@@ -479,6 +504,62 @@ export default function OrgAdminHub(props: Props) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {tab === "moderation" && (
+        <div>
+          <div style={card}>
+            <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Reported messages</p>
+            <p style={{ margin: "0 0 8px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Messages members flagged in this organization.</p>
+            {flags.length ? flags.map((f) => (
+              <div key={f.id} style={{ display: "flex", gap: 12, padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13 }}>{f.messages?.author?.display_name ?? f.messages?.author?.username} in #{f.messages?.channels?.name}</p>
+                  <p style={{ margin: "3px 0 0", fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{f.messages?.content}</p>
+                  {f.reason && <p style={{ margin: "3px 0 0", fontSize: 12, color: RED }}>Reason: {f.reason}</p>}
+                </div>
+                <button onClick={() => dismissFlag(f.id)} style={{ ...btn, alignSelf: "flex-start" }}>Dismiss</button>
+              </div>
+            )) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>No reports.</p>}
+          </div>
+
+          <div style={card}>
+            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>Banned</p>
+            {banned.length ? banned.map((b) => (
+              <div key={b.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <UserAvatar profile={b.profiles} size={26} />
+                <span style={{ flex: 1, fontSize: 14 }}>{b.profiles?.display_name ?? b.profiles?.username}</span>
+                <button onClick={() => unban(b.user_id)} style={btn}>Unban</button>
+              </div>
+            )) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>No banned members.</p>}
+          </div>
+
+          <div style={card}>
+            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>Muted</p>
+            {muted.length ? muted.map((m) => (
+              <div key={m.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <UserAvatar profile={m.profiles} size={26} />
+                <span style={{ flex: 1, fontSize: 14 }}>{m.profiles?.display_name ?? m.profiles?.username}</span>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>until {new Date(m.muted_until).toLocaleString()}</span>
+                <button onClick={() => unmute(m.user_id)} style={btn}>Unmute</button>
+              </div>
+            )) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>No muted members.</p>}
+          </div>
+
+          <div style={card}>
+            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>Appeals</p>
+            {appeals.length ? appeals.map((a) => (
+              <div key={a.id} style={{ display: "flex", gap: 12, padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13 }}>{a.profiles?.display_name ?? a.profiles?.username}</p>
+                  <p style={{ margin: "3px 0 0", fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{a.content}</p>
+                </div>
+                <button onClick={() => resolveAppeal(a.id, "approved")} style={{ ...btn, color: GREEN }}>Approve</button>
+                <button onClick={() => resolveAppeal(a.id, "rejected")} style={{ ...btn, color: RED }}>Reject</button>
+              </div>
+            )) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>No appeals.</p>}
           </div>
         </div>
       )}

@@ -332,12 +332,21 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
 
   async function handleMute(partnerId: string, ms: number) {
     setOpenMenuPartnerId(null);
-    await supabase.from("profiles").update({ muted_until: new Date(Date.now() + ms).toISOString() }).eq("id", partnerId);
+    const mutedUntil = new Date(Date.now() + ms).toISOString();
+    if (orgId) {
+      await supabase.from("organization_members").update({ muted_until: mutedUntil }).eq("org_id", orgId).eq("user_id", partnerId);
+    } else {
+      await supabase.from("profiles").update({ muted_until: mutedUntil }).eq("id", partnerId);
+    }
   }
 
   async function handleBan(partnerId: string) {
     setOpenMenuPartnerId(null);
-    await supabase.from("profiles").update({ is_banned: true }).eq("id", partnerId);
+    if (orgId) {
+      await supabase.from("organization_members").update({ is_banned: true }).eq("org_id", orgId).eq("user_id", partnerId);
+    } else {
+      await supabase.from("profiles").update({ is_banned: true }).eq("id", partnerId);
+    }
   }
 
   async function handleSetRole(partnerId: string, role: string) {
@@ -1034,7 +1043,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                   </svg>
                   Delete conversation
                 </button>
-                {canModerate && (
+                {manage && (
                   <>
                     <div className="mod-dropdown-separator" />
                     <span className="mod-dropdown-label">Mute {name}</span>
