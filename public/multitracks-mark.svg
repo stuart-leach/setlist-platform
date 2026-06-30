@@ -1,0 +1,14 @@
+<svg viewBox="0 0 626 626" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MultiTracks">
+  <defs>
+    <clipPath id="mt-circle"><circle cx="313" cy="313" r="313"/></clipPath>
+  </defs>
+  <circle cx="313" cy="313" r="313" fill="#000000"/>
+  <g clip-path="url(#mt-circle)" fill="#ffffff">
+    <rect x="55"  y="128" width="235" height="48" rx="24"/>
+    <rect x="8"   y="200" width="407" height="48" rx="24"/>
+    <rect x="-60" y="273" width="632" height="50" rx="25"/>
+    <rect x="-60" y="350" width="595" height="50" rx="25"/>
+    <rect x="16"  y="406" width="350" height="48" rx="24"/>
+    <rect x="44"  y="454" width="352" height="48" rx="24"/>
+  </g>
+</svg>

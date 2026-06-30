@@ -621,7 +621,8 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
         <div className="sidebar-header">
           {/* MultiTracks branding — persists across the app. Click to collapse. */}
           <button className="sidebar-brand-btn" onClick={onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
-            <img src="/logo.png" alt="MultiTracks" className="sidebar-logo-img" />
+            <img src="/multitracks-mark.svg" alt="MultiTracks" className="sidebar-brand-mark" />
+            <span className="sidebar-brand-word">MultiTracks</span>
           </button>
         </div>
 
