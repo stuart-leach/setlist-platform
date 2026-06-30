@@ -44,6 +44,12 @@ interface ChannelRow {
   mt_setlist_id: number | null;
 }
 
+interface OrgRole {
+  id: string;
+  key: string;
+  label: string;
+}
+
 interface Props {
   org: Organization;
   myRole: string;
@@ -51,6 +57,8 @@ interface Props {
   setlistsLastSyncedAt: string | null;
   members: Member[];
   channels: ChannelRow[];
+  roles: OrgRole[];
+  memberRoles: { user_id: string; role_key: string }[];
   inviteToken: string | null;
   mtConnectedEmail: string | null;
   mtConnectedAt: string | null;
@@ -105,6 +113,53 @@ export default function OrgAdminHub(props: Props) {
     if (error) { setChErr(error.message); return; }
     if (data) setChannels((cs) => [...cs, data as ChannelRow]);
     setNewChName("");
+    router.refresh();
+  }
+
+  // ── Roles ────────────────────────────────────────────────────────────────────
+  const [roles, setRoles] = useState<OrgRole[]>(props.roles);
+  const [newRoleLabel, setNewRoleLabel] = useState("");
+  const [roleErr, setRoleErr] = useState<string | null>(null);
+  // user_id -> set of role_key
+  const [memberRoleMap, setMemberRoleMap] = useState<Record<string, string[]>>(() => {
+    const m: Record<string, string[]> = {};
+    for (const r of props.memberRoles) (m[r.user_id] ??= []).push(r.role_key);
+    return m;
+  });
+
+  async function addRole() {
+    const label = newRoleLabel.trim();
+    if (!label) return;
+    setRoleErr(null);
+    const key = slugify(label) || "role";
+    if (roles.some((r) => r.key === key)) { setRoleErr("That role already exists."); return; }
+    const { data, error } = await supabase.from("org_roles")
+      .insert({ org_id: org.id, key, label }).select().single();
+    if (error) { setRoleErr(error.message); return; }
+    if (data) setRoles((rs) => [...rs, data as OrgRole]);
+    setNewRoleLabel("");
+    router.refresh();
+  }
+  async function removeRole(role: OrgRole) {
+    setRoles((rs) => rs.filter((r) => r.id !== role.id));
+    await supabase.from("org_roles").delete().eq("id", role.id);
+    // Also clear it from any member assignments.
+    await supabase.from("org_member_roles").delete().eq("org_id", org.id).eq("role_key", role.key);
+    setMemberRoleMap((m) => {
+      const next: Record<string, string[]> = {};
+      for (const [uid, keys] of Object.entries(m)) next[uid] = keys.filter((k) => k !== role.key);
+      return next;
+    });
+    router.refresh();
+  }
+  async function toggleMemberRole(userId: string, key: string) {
+    const has = (memberRoleMap[userId] ?? []).includes(key);
+    setMemberRoleMap((m) => ({ ...m, [userId]: has ? (m[userId] ?? []).filter((k) => k !== key) : [...(m[userId] ?? []), key] }));
+    if (has) {
+      await supabase.from("org_member_roles").delete().eq("org_id", org.id).eq("user_id", userId).eq("role_key", key);
+    } else {
+      await supabase.from("org_member_roles").insert({ org_id: org.id, user_id: userId, role_key: key });
+    }
     router.refresh();
   }
 
@@ -337,8 +392,24 @@ export default function OrgAdminHub(props: Props) {
 
           <div style={card}>
             <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Role channels</p>
-            <p style={{ margin: "0 0 4px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Visible only to members with the matching role.</p>
+            <p style={{ margin: "0 0 4px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Visible only to members with the matching role. Create one from the sidebar Role Channels <strong>+</strong>.</p>
             {roleCh.length ? roleCh.map(channelRow) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>None yet.</p>}
+          </div>
+
+          <div style={card}>
+            <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Roles</p>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Define the roles you can assign to members and gate channels by. Assign them to people on the Members tab.</p>
+            {roles.map((r) => (
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <span style={{ flex: 1, fontSize: 14 }}>{r.label}</span>
+                <button onClick={() => removeRole(r)} style={{ ...btn, background: "transparent", color: RED, padding: "4px 8px" }}>Remove</button>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              <input className="ch-form-input" value={newRoleLabel} onChange={(e) => { setNewRoleLabel(e.target.value); setRoleErr(null); }} onKeyDown={(e) => { if (e.key === "Enter") addRole(); }} placeholder="New role (e.g. Vocalists)" style={{ flex: 1 }} />
+              <button onClick={addRole} style={btn}>Add role</button>
+            </div>
+            {roleErr && <p style={{ margin: "8px 0 0", fontSize: 12, color: RED }}>{roleErr}</p>}
           </div>
         </div>
       )}
@@ -361,26 +432,44 @@ export default function OrgAdminHub(props: Props) {
 
           <div style={card}>
             <p style={{ margin: "0 0 12px", fontWeight: 600 }}>Members</p>
-            {members.map((m) => (
-              <div key={m.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                <UserAvatar profile={m.profiles} size={28} />
-                <span style={{ flex: 1, fontSize: 14 }}>{m.profiles?.display_name ?? m.profiles?.username}</span>
-                {m.role === "owner" ? (
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>owner</span>
-                ) : isOwner || props.myRole === "admin" ? (
-                  <>
-                    <select value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} className="ch-form-input" style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}>
-                      <option value="member">member</option>
-                      <option value="admin">admin</option>
-                      {isOwner && <option value="owner">owner</option>}
-                    </select>
-                    <button onClick={() => removeMember(m.user_id)} style={{ ...btn, color: RED, background: "transparent" }}>Remove</button>
-                  </>
-                ) : (
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>{m.role}</span>
-                )}
-              </div>
-            ))}
+            {members.map((m) => {
+              const assigned = memberRoleMap[m.user_id] ?? [];
+              return (
+                <div key={m.user_id} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <UserAvatar profile={m.profiles} size={28} />
+                    <span style={{ flex: 1, fontSize: 14 }}>{m.profiles?.display_name ?? m.profiles?.username}</span>
+                    {m.role === "owner" ? (
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>owner</span>
+                    ) : isOwner || props.myRole === "admin" ? (
+                      <>
+                        <select value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} className="ch-form-input" style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}>
+                          <option value="member">member</option>
+                          <option value="admin">admin</option>
+                          {isOwner && <option value="owner">owner</option>}
+                        </select>
+                        <button onClick={() => removeMember(m.user_id)} style={{ ...btn, color: RED, background: "transparent" }}>Remove</button>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>{m.role}</span>
+                    )}
+                  </div>
+                  {roles.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, paddingLeft: 40 }}>
+                      {roles.map((r) => {
+                        const on = assigned.includes(r.key);
+                        return (
+                          <button key={r.key} type="button" onClick={() => toggleMemberRole(m.user_id, r.key)}
+                            style={{ border: `1px solid ${on ? "#fff" : "rgba(255,255,255,0.2)"}`, background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.55)", borderRadius: 999, padding: "3px 10px", fontSize: 12, cursor: "pointer" }}>
+                            {r.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

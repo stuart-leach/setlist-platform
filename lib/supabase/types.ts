@@ -103,6 +103,16 @@ export interface Database {
         Insert: { org_id: string; role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
         Update: { role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; updated_at?: string; };
       };
+      org_roles: {
+        Row: { id: string; org_id: string; key: string; label: string; created_at: string; };
+        Insert: { id?: string; org_id: string; key: string; label: string; created_at?: string; };
+        Update: { key?: string; label?: string; };
+      };
+      org_member_roles: {
+        Row: { org_id: string; user_id: string; role_key: string; };
+        Insert: { org_id: string; user_id: string; role_key: string; };
+        Update: { role_key?: string; };
+      };
       community_settings: {
         Row: { id: boolean; role_channels_enabled: boolean; setlists_last_synced_at: string | null; community_name: string | null; logo_url: string | null; updated_at: string; };
         Insert: { id?: boolean; role_channels_enabled?: boolean; setlists_last_synced_at?: string | null; community_name?: string | null; logo_url?: string | null; updated_at?: string; };

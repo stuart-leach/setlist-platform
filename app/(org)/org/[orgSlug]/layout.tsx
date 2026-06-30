@@ -34,7 +34,7 @@ export default async function OrgLayout({ children, params }: Props) {
   const isManager =
     membership?.role === "owner" || membership?.role === "admin" || profile.role === "admin";
 
-  const [channelsResult, dmThreadsResult, communityRolesResult, allOrgsResult, settingsResult] = await Promise.all([
+  const [channelsResult, dmThreadsResult, memberRolesResult, allOrgsResult, settingsResult, orgRolesResult] = await Promise.all([
     supabase.from("channels").select("*").eq("org_id", org.id).order("name"),
     supabase
       .from("dm_threads")
@@ -42,14 +42,16 @@ export default async function OrgLayout({ children, params }: Props) {
       .or(`participant_a.eq.${user.id},participant_b.eq.${user.id}`)
       .order("created_at", { ascending: false })
       .limit(20),
-    supabase.from("community_roles").select("role").eq("user_id", user.id),
+    supabase.from("org_member_roles").select("role_key").eq("org_id", org.id).eq("user_id", user.id),
     supabase.from("organizations").select("*").order("name"),
     supabase.from("org_settings").select("role_channels_enabled").eq("org_id", org.id).maybeSingle(),
+    supabase.from("org_roles").select("key, label").eq("org_id", org.id).order("label"),
   ]);
 
   const channels = (channelsResult.data ?? []) as Channel[];
   const allOrgs = (allOrgsResult.data ?? []) as Organization[];
   const roleChannelsEnabled = settingsResult.data?.role_channels_enabled ?? true;
+  const orgRoles = (orgRolesResult.data ?? []) as { key: string; label: string }[];
 
   // DMs are global (cross-org) — same shape the community layout builds.
   const threads = dmThreadsResult.data ?? [];
@@ -63,7 +65,7 @@ export default async function OrgLayout({ children, params }: Props) {
     const partnerId = thread.participant_a === user.id ? thread.participant_b : thread.participant_a;
     return [partnerId, thread.id];
   }));
-  const userCommunityRoles: string[] = (communityRolesResult.data ?? []).map((r) => r.role);
+  const userCommunityRoles: string[] = (memberRolesResult.data ?? []).map((r) => r.role_key);
 
   return (
     <CommunityShell
@@ -81,6 +83,7 @@ export default async function OrgLayout({ children, params }: Props) {
       orgId={org.id}
       canManage={isManager}
       showAdminLink={isManager}
+      orgRoles={orgRoles}
     >
       {children}
     </CommunityShell>

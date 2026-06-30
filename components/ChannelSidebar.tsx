@@ -34,6 +34,7 @@ interface Props {
   orgId?: string | null;   // org that new setlist/channels belong to
   canManage?: boolean;     // can create setlists / manage (default: admin or moderator)
   showAdminLink?: boolean; // show the Admin Hub link (default: platform admin)
+  orgRoles?: { key: string; label: string }[]; // org roles for role-channel creation
 }
 
 function applyOrder(channels: Channel[], order: string[]): Channel[] {
@@ -46,7 +47,7 @@ function applyOrder(channels: Channel[], order: string[]): Channel[] {
   });
 }
 
-export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, collapsed, onCollapse, onExpand, basePath = "/channels", adminPath = "/admin", orgId = null, canManage, showAdminLink }: Props) {
+export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, collapsed, onCollapse, onExpand, basePath = "/channels", adminPath = "/admin", orgId = null, canManage, showAdminLink, orgRoles = [] }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -60,6 +61,11 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelError, setNewChannelError] = useState("");
   const [savingChannel, setSavingChannel] = useState(false);
+  const [showNewRole, setShowNewRole] = useState(false);
+  const [newRoleChName, setNewRoleChName] = useState("");
+  const [newRoleChRoles, setNewRoleChRoles] = useState<string[]>([]);
+  const [newRoleChError, setNewRoleChError] = useState("");
+  const [savingRoleCh, setSavingRoleCh] = useState(false);
   const [profileModalUser, setProfileModalUser] = useState<Profile | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [localPartners, setLocalPartners] = useState<Profile[]>(dmPartners);
@@ -404,6 +410,37 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     if (data) router.push(chHref(slug));
   }
 
+  async function saveNewRoleChannel() {
+    const name = newRoleChName.trim();
+    if (!name) { setNewRoleChError("Channel name is required."); return; }
+    if (newRoleChRoles.length === 0) { setNewRoleChError("Pick at least one role that can see this channel."); return; }
+    const baseSlug = toSlug(name);
+    if (!baseSlug) { setNewRoleChError("Please use letters or numbers in the name."); return; }
+    const existing = new Set(channels.map((c) => c.slug));
+    let slug = baseSlug;
+    for (let i = 2; existing.has(slug); i++) slug = `${baseSlug}-${i}`;
+
+    setSavingRoleCh(true);
+    const { data, error } = await supabase.from("channels").insert({
+      name,
+      slug,
+      channel_type: "role",
+      required_role: newRoleChRoles,
+      locked: false,
+      org_id: orgId,
+    }).select().single();
+    setSavingRoleCh(false);
+
+    if (error) { setNewRoleChError(error.message); return; }
+
+    setShowNewRole(false);
+    setNewRoleChName("");
+    setNewRoleChRoles([]);
+    setNewRoleChError("");
+    router.refresh();
+    if (data) router.push(chHref(slug));
+  }
+
   // ── Mini-rail (collapsed) ────────────────────────────────────────────────────
   const dmActive = pathname.startsWith("/dm/");
   const roleActive = orderedRole.some((ch) => pathname === chHref(ch.slug));
@@ -677,10 +714,24 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
             </p>
           )}
 
-          {showRoleChannels && (
+          {roleChannelsEnabled && (canManageSetlists || orderedRole.length > 0) && (
             <>
               <div className="sidebar-separator" />
-              <p className="sidebar-section-label">Role Channels</p>
+              <div className="sidebar-section-row">
+                <span className="sidebar-section-label">Role Channels</span>
+                {canManageSetlists && (
+                  <button
+                    className="sidebar-new-dm-btn"
+                    onClick={() => { setNewRoleChName(""); setNewRoleChRoles([]); setNewRoleChError(""); setShowNewRole(true); }}
+                    title="New role channel"
+                    aria-label="New role channel"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                      <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
               {orderedRole.map((ch, index) => {
                 const active = pathname === chHref(ch.slug);
                 const isDragging = dragging?.type === "role" && dragging.index === index;
@@ -893,6 +944,67 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                   {savingChannel ? "Creating…" : "Create Channel"}
                 </button>
                 <button className="ch-btn-ghost" onClick={() => setShowNewChannel(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewRole && (
+        <div className="modal-overlay" onClick={() => setShowNewRole(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">New Role Channel</h2>
+              <button className="modal-close" onClick={() => setShowNewRole(false)}>×</button>
+            </div>
+            <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.55 }}>
+                Only members with one of the selected roles will see this channel.
+              </p>
+              <div className="ch-form-field">
+                <label className="ch-form-label">Channel Name</label>
+                <input
+                  className="ch-form-input"
+                  value={newRoleChName}
+                  onChange={(e) => { setNewRoleChName(e.target.value); setNewRoleChError(""); }}
+                  placeholder="e.g. Vocalists"
+                  autoFocus
+                />
+              </div>
+              <div className="ch-form-field">
+                <label className="ch-form-label">Who can see it</label>
+                {orgRoles.length === 0 ? (
+                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+                    No roles yet. Create roles in Admin Hub → Channels → Roles first.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                    {orgRoles.map((r) => {
+                      const on = newRoleChRoles.includes(r.key);
+                      return (
+                        <button
+                          key={r.key}
+                          type="button"
+                          onClick={() => setNewRoleChRoles((prev) => on ? prev.filter((k) => k !== r.key) : [...prev, r.key])}
+                          style={{
+                            border: `1px solid ${on ? "#fff" : "rgba(255,255,255,0.2)"}`,
+                            background: on ? "rgba(255,255,255,0.12)" : "transparent",
+                            color: "#fff", borderRadius: 999, padding: "5px 12px", fontSize: 13, cursor: "pointer",
+                          }}
+                        >
+                          {r.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {newRoleChError && <p className="ch-form-error">{newRoleChError}</p>}
+              <div className="ch-form-actions">
+                <button className="ch-btn-primary" onClick={saveNewRoleChannel} disabled={savingRoleCh || orgRoles.length === 0}>
+                  {savingRoleCh ? "Creating…" : "Create Role Channel"}
+                </button>
+                <button className="ch-btn-ghost" onClick={() => setShowNewRole(false)}>Cancel</button>
               </div>
             </div>
           </div>

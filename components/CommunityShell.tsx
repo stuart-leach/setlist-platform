@@ -20,10 +20,11 @@ interface Props {
   orgId?: string | null;
   canManage?: boolean;
   showAdminLink?: boolean;
+  orgRoles?: { key: string; label: string }[];
   children: React.ReactNode;
 }
 
-export default function CommunityShell({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, basePath, adminPath, orgId, canManage, showAdminLink, children }: Props) {
+export default function CommunityShell({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, basePath, adminPath, orgId, canManage, showAdminLink, orgRoles, children }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -43,6 +44,7 @@ export default function CommunityShell({ channels, currentUser, dmPartners, dmTh
         orgId={orgId}
         canManage={canManage}
         showAdminLink={showAdminLink}
+        orgRoles={orgRoles}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
         onExpand={() => setCollapsed(false)}
