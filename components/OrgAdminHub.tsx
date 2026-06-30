@@ -215,6 +215,38 @@ export default function OrgAdminHub(props: Props) {
     </div>
   );
 
+  // ── Edit a role channel (name + which roles can access) ──────────────────────
+  const roleLabel = (key: string) => roles.find((r) => r.key === key)?.label ?? key;
+  const [editCh, setEditCh] = useState<ChannelRow | null>(null);
+  const [editChName, setEditChName] = useState("");
+  const [editChRoles, setEditChRoles] = useState<string[]>([]);
+  const [editErr, setEditErr] = useState<string | null>(null);
+
+  function openEdit(c: ChannelRow) {
+    setEditCh(c); setEditChName(c.name); setEditChRoles(c.required_role ?? []); setEditErr(null);
+  }
+  async function saveEdit() {
+    if (!editCh) return;
+    const name = editChName.trim();
+    if (!name) { setEditErr("Channel name is required."); return; }
+    if (editChRoles.length === 0) { setEditErr("Pick at least one role that can see this channel."); return; }
+    setChannels((cs) => cs.map((c) => c.id === editCh.id ? { ...c, name, required_role: editChRoles } : c));
+    const { error } = await supabase.from("channels").update({ name, required_role: editChRoles }).eq("id", editCh.id);
+    if (error) { setEditErr(error.message); return; }
+    setEditCh(null);
+    router.refresh();
+  }
+
+  const roleChannelRow = (c: ChannelRow) => (
+    <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+      <span style={{ color: "rgba(255,255,255,0.35)" }}>#</span>
+      <span style={{ flex: 1, fontSize: 14 }}>{c.name}</span>
+      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{(c.required_role ?? []).map(roleLabel).join(", ") || "no roles"}</span>
+      <button onClick={() => openEdit(c)} style={{ ...btn, background: "transparent", padding: "4px 8px" }}>Edit</button>
+      <button onClick={() => deleteChannel(c.id)} style={{ ...btn, background: "transparent", color: RED, padding: "4px 8px" }}>Delete</button>
+    </div>
+  );
+
   // Branding
   const [name, setName] = useState(org.name);
   const [logo, setLogo] = useState<string | null>(org.logo_url);
@@ -427,7 +459,7 @@ export default function OrgAdminHub(props: Props) {
           <div style={card}>
             <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Role channels</p>
             <p style={{ margin: "0 0 4px", fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Visible only to members with the matching role. Create one from the sidebar Role Channels <strong>+</strong>.</p>
-            {roleCh.length ? roleCh.map(channelRow) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>None yet.</p>}
+            {roleCh.length ? roleCh.map(roleChannelRow) : <p style={{ margin: "8px 0 0", fontSize: 13, color: "rgba(255,255,255,0.3)" }}>None yet.</p>}
           </div>
 
           <div style={card}>
@@ -564,6 +596,41 @@ export default function OrgAdminHub(props: Props) {
         </div>
       )}
     </div>
+
+    {editCh && (
+      <div onClick={() => setEditCh(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: "#141414", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: 22, color: "#fff" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Edit Role Channel</h2>
+            <button onClick={() => setEditCh(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 20, cursor: "pointer" }}>×</button>
+          </div>
+          <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Name</label>
+          <input className="ch-form-input" value={editChName} onChange={(e) => { setEditChName(e.target.value); setEditErr(null); }} style={{ width: "100%", margin: "4px 0 16px" }} autoFocus />
+          <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Who can see it</label>
+          {roles.length === 0 ? (
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "rgba(255,255,255,0.45)" }}>No roles yet — add some in the Roles section.</p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "6px 0 0" }}>
+              {roles.map((r) => {
+                const on = editChRoles.includes(r.key);
+                return (
+                  <button key={r.key} type="button"
+                    onClick={() => setEditChRoles((prev) => on ? prev.filter((k) => k !== r.key) : [...prev, r.key])}
+                    style={{ border: `1px solid ${on ? "#fff" : "rgba(255,255,255,0.2)"}`, background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.6)", borderRadius: 999, padding: "5px 12px", fontSize: 13, cursor: "pointer" }}>
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {editErr && <p style={{ margin: "12px 0 0", fontSize: 12, color: RED }}>{editErr}</p>}
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <button onClick={saveEdit} style={{ ...btn, background: "#fff", color: "#000" }}>Save changes</button>
+            <button onClick={() => setEditCh(null)} style={{ ...btn, background: "transparent" }}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
