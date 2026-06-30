@@ -19,44 +19,49 @@ export default function JoinPage() {
 
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser();
-      // New person: send them to create an account, then come back here to auto-join.
-      if (!user) {
-        router.push(`/auth/login?tab=signup&next=/join/${token}`);
-        return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        // New person: send them to create an account, then come back to auto-join.
+        if (!user) {
+          router.push(`/auth/login?tab=signup&next=/join/${token}`);
+          return;
+        }
+
+        // Look up the invite (only the org id — reading the org row itself is
+        // RLS-blocked until they're a member, so we don't embed it here).
+        const { data: invite } = await supabase
+          .from("organization_invites")
+          .select("org_id")
+          .eq("token", token)
+          .maybeSingle();
+
+        if (!invite) { setState("invalid"); return; }
+        const oid = invite.org_id;
+
+        // Join if not already a member.
+        const { data: existing } = await supabase
+          .from("organization_members")
+          .select("org_id")
+          .eq("org_id", oid)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!existing) {
+          setState("joining");
+          const { error } = await supabase
+            .from("organization_members")
+            .insert({ org_id: oid, user_id: user.id, role: "member" });
+          if (error) { setErrorMsg(error.message); setState("error"); return; }
+        }
+
+        // Now a member → the org row is readable. Go to it.
+        const { data: org } = await supabase
+          .from("organizations").select("slug").eq("id", oid).maybeSingle();
+        router.replace(org?.slug ? `/org/${org.slug}` : "/");
+      } catch (e) {
+        setErrorMsg(e instanceof Error ? e.message : "Something went wrong.");
+        setState("error");
       }
-
-      // Look up invite
-      const { data: invite } = await supabase
-        .from("organization_invites")
-        .select("org_id, organizations(id, name, slug)")
-        .eq("token", token)
-        .single();
-
-      if (!invite) { setState("invalid"); return; }
-
-      const org = (invite as any).organizations;
-      setOrgName(org.name);
-      setOrgSlug(org.slug);
-      setOrgId(org.id);
-
-      // Already a member → straight in.
-      const { data: existing } = await supabase
-        .from("organization_members")
-        .select("org_id")
-        .eq("org_id", org.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (existing) { router.replace(`/org/${org.slug}`); return; }
-
-      // Otherwise auto-join and go to the org.
-      setState("joining");
-      const { error } = await supabase
-        .from("organization_members")
-        .insert({ org_id: org.id, user_id: user.id, role: "member" });
-      if (error) { setErrorMsg(error.message); setState("error"); return; }
-      router.replace(`/org/${org.slug}`);
     }
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
