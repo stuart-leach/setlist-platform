@@ -619,17 +619,9 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     <>
       <aside className="sidebar">
         <div className="sidebar-header">
-          {logoUrl ? (
-            <img src={logoUrl} alt={communityName ?? "Community logo"} className="sidebar-logo-img sidebar-logo-img--custom" />
-          ) : (
+          {/* MultiTracks branding — persists across the app. Click to collapse. */}
+          <button className="sidebar-brand-btn" onClick={onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
             <img src="/logo.png" alt="MultiTracks" className="sidebar-logo-img" />
-          )}
-          {communityName && <span className="sidebar-community-name">{communityName}</span>}
-          <OrgSwitcher orgs={orgs} />
-          <button className="sidebar-collapse-btn" onClick={onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-              <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
           </button>
         </div>
 
@@ -828,24 +820,29 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
           )}
         </nav>
 
-        {/* Admin link — only visible to admins, sits just above the footer */}
-        {adminLinkVisible && (
-          <Link
-            href={adminPath}
-            className={`sidebar-admin-link${pathname === adminPath ? " active" : ""}`}
-          >
-            <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 1.5L2 4v4c0 3.31 2.58 6.41 6 7 3.42-.59 6-3.69 6-7V4L8 1.5Z"/>
-              </svg>
-              {adminAlertCount > 0 && (
-                <span className="admin-alert-badge">
-                  {adminAlertCount > 9 ? "9+" : adminAlertCount}
-                </span>
-              )}
+        {/* Switch between / create organizations */}
+        <OrgSwitcher orgs={orgs} />
+
+        {/* Organization branding — bottom-left. Click → Admin Hub (managers only). */}
+        {adminLinkVisible ? (
+          <Link href={adminPath} className={`sidebar-org-row${pathname === adminPath ? " active" : ""}`} title="Organization settings">
+            <span className="sidebar-org-logo">
+              {logoUrl
+                ? <img src={logoUrl} alt="" />
+                : <span className="sidebar-org-logo-fallback">{communityName?.[0]?.toUpperCase() ?? "O"}</span>}
+              {adminAlertCount > 0 && <span className="admin-alert-badge">{adminAlertCount > 9 ? "9+" : adminAlertCount}</span>}
             </span>
-            Admin Hub
+            <span className="sidebar-org-name">{communityName ?? "Organization"}</span>
           </Link>
+        ) : (
+          <div className="sidebar-org-row sidebar-org-row--static">
+            <span className="sidebar-org-logo">
+              {logoUrl
+                ? <img src={logoUrl} alt="" />
+                : <span className="sidebar-org-logo-fallback">{communityName?.[0]?.toUpperCase() ?? "O"}</span>}
+            </span>
+            <span className="sidebar-org-name">{communityName ?? "Organization"}</span>
+          </div>
         )}
 
         <div className="sidebar-footer">
