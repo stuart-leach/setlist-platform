@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -10,6 +10,14 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
   const [tab, setTab] = useState<Tab>("signin");
+  // Where to go after auth (e.g. back to an invite link), read from ?next=.
+  const [next, setNext] = useState("/");
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    setNext(p.get("next") || "/");
+    if (p.get("tab") === "signup") setTab("signup");
+  }, []);
 
   // ── Sign in ──────────────────────────────────────────────────────────────────
   const [siEmail,    setSiEmail]    = useState("");
@@ -44,7 +52,7 @@ export default function LoginPage() {
       );
       return;
     }
-    router.push("/");
+    router.push(next);
     router.refresh();
   }
 
@@ -75,7 +83,11 @@ export default function LoginPage() {
     setResetSent(false);
     setSuLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({ email: suEmail, password: suPassword });
+    const { data, error } = await supabase.auth.signUp({
+      email: suEmail,
+      password: suPassword,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+    });
     if (error) {
       setSuLoading(false);
       const msg = error.message.toLowerCase();
@@ -102,7 +114,7 @@ export default function LoginPage() {
     // the welcome modal in AnonymousAuthProvider will prompt for role selection.
     // Otherwise show the "check your email" screen.
     if (data.session) {
-      router.push("/");
+      router.push(next);
       router.refresh();
     } else {
       setSuDone(true);

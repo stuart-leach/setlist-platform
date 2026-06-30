@@ -20,8 +20,9 @@ export default function JoinPage() {
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
+      // New person: send them to create an account, then come back here to auto-join.
       if (!user) {
-        router.push(`/auth/login?next=/join/${token}`);
+        router.push(`/auth/login?tab=signup&next=/join/${token}`);
         return;
       }
 
@@ -39,17 +40,23 @@ export default function JoinPage() {
       setOrgSlug(org.slug);
       setOrgId(org.id);
 
-      // Check if already a member
+      // Already a member → straight in.
       const { data: existing } = await supabase
         .from("organization_members")
         .select("org_id")
         .eq("org_id", org.id)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (existing) { setState("already"); return; }
+      if (existing) { router.replace(`/org/${org.slug}`); return; }
 
-      setState("ready");
+      // Otherwise auto-join and go to the org.
+      setState("joining");
+      const { error } = await supabase
+        .from("organization_members")
+        .insert({ org_id: org.id, user_id: user.id, role: "member" });
+      if (error) { setErrorMsg(error.message); setState("error"); return; }
+      router.replace(`/org/${org.slug}`);
     }
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
