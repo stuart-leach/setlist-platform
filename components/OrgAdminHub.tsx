@@ -53,6 +53,7 @@ interface OrgRole {
 interface Props {
   org: Organization;
   myRole: string;
+  isPlatformAdmin?: boolean;
   roleChannelsEnabled: boolean;
   setlistsLastSyncedAt: string | null;
   members: Member[];
@@ -287,8 +288,16 @@ export default function OrgAdminHub(props: Props) {
   }
 
   return (
+    <div style={{ height: "100%", overflowY: "auto" }}>
     <div style={{ padding: "28px 32px", maxWidth: 760, margin: "0 auto", color: "#fff" }}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{org.name} — Settings</h1>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{org.name} — Settings</h1>
+        {props.isPlatformAdmin && (
+          <a href="/admin" style={{ fontSize: 13, color: "#ff453a", textDecoration: "none", whiteSpace: "nowrap" }}>
+            Platform moderation →
+          </a>
+        )}
+      </div>
       <div style={{ display: "flex", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.1)", margin: "18px 0 8px" }}>
         {(["settings", "channels", "members"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
@@ -473,6 +482,7 @@ export default function OrgAdminHub(props: Props) {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

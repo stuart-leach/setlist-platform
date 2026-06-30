@@ -51,6 +51,7 @@ export default async function OrgAdminPage({ params }: Props) {
     <OrgAdminHub
       org={org as Organization}
       myRole={membership?.role ?? (profile?.role === "admin" ? "admin" : "member")}
+      isPlatformAdmin={profile?.role === "admin"}
       roleChannelsEnabled={settingsResult.data?.role_channels_enabled ?? true}
       setlistsLastSyncedAt={settingsResult.data?.setlists_last_synced_at ?? null}
       members={(membersResult.data ?? []) as any[]}
