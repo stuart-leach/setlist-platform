@@ -3490,16 +3490,10 @@ html, body {
   padding: 0;
   cursor: pointer;
 }
-.sidebar-brand-mark {
-  width: 26px;
-  height: 26px;
+.sidebar-brand-logo {
+  height: 20px;
+  width: auto;
   flex-shrink: 0;
-}
-.sidebar-brand-word {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: #fff;
 }
 
 /* Organization branding row (bottom-left) — replaces the old Admin Hub link */
