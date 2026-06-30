@@ -17,6 +17,7 @@ interface Props {
   logoUrl: string | null;
   basePath?: string;
   adminPath?: string;
+  profilePath?: string;
   orgId?: string | null;
   canManage?: boolean;
   showAdminLink?: boolean;
@@ -24,7 +25,7 @@ interface Props {
   children: React.ReactNode;
 }
 
-export default function CommunityShell({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, basePath, adminPath, orgId, canManage, showAdminLink, orgRoles, children }: Props) {
+export default function CommunityShell({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, basePath, adminPath, profilePath, orgId, canManage, showAdminLink, orgRoles, children }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -41,6 +42,7 @@ export default function CommunityShell({ channels, currentUser, dmPartners, dmTh
         logoUrl={logoUrl}
         basePath={basePath}
         adminPath={adminPath}
+        profilePath={profilePath}
         orgId={orgId}
         canManage={canManage}
         showAdminLink={showAdminLink}

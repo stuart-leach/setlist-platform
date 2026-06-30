@@ -94,6 +94,7 @@ export default async function OrgLayout({ children, params }: Props) {
       logoUrl={(org as Organization).logo_url}
       basePath={`/org/${orgSlug}/channels`}
       adminPath={`/org/${orgSlug}/admin`}
+      profilePath={`/org/${orgSlug}/profile`}
       orgId={org.id}
       canManage={isManager}
       showAdminLink={isManager}

@@ -31,6 +31,7 @@ interface Props {
   // Org-aware context (community defaults preserve existing behavior)
   basePath?: string;       // channel link prefix, e.g. "/org/{slug}/channels"
   adminPath?: string;      // admin hub link, e.g. "/org/{slug}/admin"
+  profilePath?: string;    // profile link, e.g. "/org/{slug}/profile"
   orgId?: string | null;   // org that new setlist/channels belong to
   canManage?: boolean;     // can create setlists / manage (default: admin or moderator)
   showAdminLink?: boolean; // show the Admin Hub link (default: platform admin)
@@ -47,7 +48,7 @@ function applyOrder(channels: Channel[], order: string[]): Channel[] {
   });
 }
 
-export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, collapsed, onCollapse, onExpand, basePath = "/channels", adminPath = "/admin", orgId = null, canManage, showAdminLink, orgRoles = [] }: Props) {
+export default function ChannelSidebar({ channels, currentUser, dmPartners, dmThreadIds, userCommunityRoles, orgs, roleChannelsEnabled, communityName, logoUrl, collapsed, onCollapse, onExpand, basePath = "/channels", adminPath = "/admin", profilePath = "/profile", orgId = null, canManage, showAdminLink, orgRoles = [] }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -600,7 +601,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
           )}
 
           <div className="mini-footer">
-            <Link href="/profile" className="mini-avatar-btn" title="Your profile" aria-label="Your profile">
+            <Link href={profilePath} className="mini-avatar-btn" title="Your profile" aria-label="Your profile">
               <UserAvatar profile={currentUser} size={28} />
             </Link>
           </div>
@@ -848,7 +849,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
         )}
 
         <div className="sidebar-footer">
-          <Link href="/profile" style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, textDecoration: "none" }}>
+          <Link href={profilePath} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, textDecoration: "none" }}>
             <UserAvatar profile={currentUser} size={26} />
             <div style={{ minWidth: 0 }}>
               <p className="sidebar-footer-name">{currentUser.display_name ?? currentUser.username}</p>
