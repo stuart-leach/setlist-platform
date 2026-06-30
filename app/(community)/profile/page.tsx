@@ -24,15 +24,40 @@ export default async function ProfilePage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   let profile: Profile = PREVIEW_PROFILE;
-  let initialCommunityRoles: string[] = [];
+  // Roles grouped by the orgs the user belongs to (the single, app-wide role system).
+  let orgRoleData: { orgId: string; orgName: string; roles: { key: string; label: string }[]; assigned: string[] }[] = [];
 
   if (user) {
-    const [profileResult, communityRolesResult] = await Promise.all([
+    const [profileResult, membershipsResult, assignmentsResult] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single(),
-      supabase.from("community_roles").select("role").eq("user_id", user.id),
+      supabase.from("organization_members")
+        .select("org_id, organizations(id, name)")
+        .eq("user_id", user.id).eq("is_banned", false),
+      supabase.from("org_member_roles").select("org_id, role_key").eq("user_id", user.id),
     ]);
     if (profileResult.data) profile = profileResult.data;
-    initialCommunityRoles = (communityRolesResult.data ?? []).map((r) => r.role);
+
+    const memberships = membershipsResult.data ?? [];
+    const orgIds = memberships.map((m) => m.org_id);
+    const assignedByOrg = new Map<string, string[]>();
+    for (const a of assignmentsResult.data ?? []) {
+      assignedByOrg.set(a.org_id, [...(assignedByOrg.get(a.org_id) ?? []), a.role_key]);
+    }
+
+    let rolesByOrg = new Map<string, { key: string; label: string }[]>();
+    if (orgIds.length) {
+      const { data: roleRows } = await supabase.from("org_roles").select("org_id, key, label").in("org_id", orgIds).order("label");
+      for (const r of roleRows ?? []) {
+        rolesByOrg.set(r.org_id, [...(rolesByOrg.get(r.org_id) ?? []), { key: r.key, label: r.label }]);
+      }
+    }
+
+    orgRoleData = memberships.map((m) => ({
+      orgId: m.org_id,
+      orgName: (m as any).organizations?.name ?? "Organization",
+      roles: rolesByOrg.get(m.org_id) ?? [],
+      assigned: assignedByOrg.get(m.org_id) ?? [],
+    }));
   }
 
   return (
@@ -47,7 +72,7 @@ export default async function ProfilePage() {
         <ProfileForm
           profile={profile}
           isPreview={!user}
-          initialCommunityRoles={initialCommunityRoles}
+          orgRoleData={orgRoleData}
           authEmail={user?.email ?? null}
         />
       </div>

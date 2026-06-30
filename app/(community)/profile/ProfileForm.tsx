@@ -7,24 +7,26 @@ import UserAvatar from "@/components/UserAvatar";
 import AvatarCropModal from "@/components/AvatarCropModal";
 import type { Profile } from "@/lib/supabase/types";
 
-const COMMUNITY_ROLE_OPTIONS = [
-  { value: "worship_leader",      label: "Worship Leader" },
-  { value: "band_member",         label: "Band Member" },
-  { value: "vocalist",            label: "Vocalist" },
-  { value: "music_director",      label: "Music Director" },
-  { value: "production_director", label: "Production Director" },
-];
+interface OrgRoleData {
+  orgId: string;
+  orgName: string;
+  roles: { key: string; label: string }[];
+  assigned: string[];
+}
 
 interface Props {
   profile: Profile;
   isPreview: boolean;
-  initialCommunityRoles: string[];
+  orgRoleData: OrgRoleData[];
   authEmail: string | null;
 }
 
-export default function ProfileForm({ profile, isPreview, initialCommunityRoles, authEmail }: Props) {
+export default function ProfileForm({ profile, isPreview, orgRoleData, authEmail }: Props) {
   const router = useRouter();
-  const [communityRoles, setCommunityRoles] = useState<string[]>(initialCommunityRoles);
+  // assignments per org: orgId -> role keys the user holds
+  const [orgAssignments, setOrgAssignments] = useState<Record<string, string[]>>(
+    () => Object.fromEntries(orgRoleData.map((o) => [o.orgId, o.assigned]))
+  );
   const [form, setForm] = useState({
     display_name: profile.display_name ?? "",
     username: profile.username ?? "",
@@ -134,15 +136,20 @@ export default function ProfileForm({ profile, isPreview, initialCommunityRoles,
     }
   }
 
-  async function toggleCommunityRole(role: string) {
-    const hasRole = communityRoles.includes(role);
-    setCommunityRoles((prev) => hasRole ? prev.filter((r) => r !== role) : [...prev, role]);
+  async function toggleOrgRole(orgId: string, roleKey: string) {
+    const current = orgAssignments[orgId] ?? [];
+    const hasRole = current.includes(roleKey);
+    setOrgAssignments((prev) => ({
+      ...prev,
+      [orgId]: hasRole ? current.filter((k) => k !== roleKey) : [...current, roleKey],
+    }));
     if (isPreview) return;
     if (hasRole) {
-      await supabase.from("community_roles").delete().eq("user_id", profile.id).eq("role", role);
+      await supabase.from("org_member_roles").delete().eq("org_id", orgId).eq("user_id", profile.id).eq("role_key", roleKey);
     } else {
-      await supabase.from("community_roles").insert({ user_id: profile.id, role });
+      await supabase.from("org_member_roles").insert({ org_id: orgId, user_id: profile.id, role_key: roleKey });
     }
+    router.refresh();
   }
 
   const displayProfile = {
@@ -266,25 +273,40 @@ export default function ProfileForm({ profile, isPreview, initialCommunityRoles,
         </div>
       </div>
 
-      <div className="profile-divider" />
-      <div className="profile-fields">
-        <div className="profile-field profile-field-full">
-          <label className="profile-label">Community Roles</label>
-          <p className="profile-roles-hint">Select all that apply — each role unlocks its own dedicated channel. You can hold multiple roles.</p>
-          <div className="profile-roles-grid">
-            {COMMUNITY_ROLE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className={`profile-role-pill${communityRoles.includes(opt.value) ? " active" : ""}`}
-                onClick={() => toggleCommunityRole(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
+      {orgRoleData.length > 0 && (
+        <>
+          <div className="profile-divider" />
+          <div className="profile-fields">
+            <div className="profile-field profile-field-full">
+              <label className="profile-label">Your Roles</label>
+              <p className="profile-roles-hint">Select the roles that apply to you in each organization — each role unlocks its dedicated channels. These are the same roles your admins manage.</p>
+              {orgRoleData.map((org) => (
+                <div key={org.orgId} style={{ marginTop: 14 }}>
+                  {orgRoleData.length > 1 && (
+                    <p style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.55)", margin: "0 0 6px" }}>{org.orgName}</p>
+                  )}
+                  {org.roles.length === 0 ? (
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", margin: 0 }}>No roles defined yet in {org.orgName}.</p>
+                  ) : (
+                    <div className="profile-roles-grid">
+                      {org.roles.map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          className={`profile-role-pill${(orgAssignments[org.orgId] ?? []).includes(opt.key) ? " active" : ""}`}
+                          onClick={() => toggleOrgRole(org.orgId, opt.key)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       <div className="profile-divider" />
 
