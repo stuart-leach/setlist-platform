@@ -468,13 +468,7 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
         <aside className="sidebar sidebar-mini">
           <div className="mini-top">
             <button className="mini-expand-btn" onClick={onExpand} title="Expand sidebar" aria-label="Expand sidebar">
-              <img
-                src={logoUrl ?? "/Logo-Mark.png"}
-                alt=""
-                className="mini-logo-mark"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextSibling as HTMLElement | null)?.removeAttribute("hidden"); }}
-              />
-              <span className="mini-logo-fallback" hidden>{communityName?.[0]?.toUpperCase() ?? "MT"}</span>
+              <img src="/Logo-Mark-white.png" alt="MultiTracks" className="mini-logo-mark" />
             </button>
           </div>
 
@@ -586,9 +580,11 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
                 aria-label="Admin Hub"
               >
                 <span style={{ position: "relative", display: "flex" }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                  </svg>
+                  <span className="mini-org-logo">
+                    {logoUrl
+                      ? <img src={logoUrl} alt="" />
+                      : <span className="mini-org-logo-fallback">{communityName?.[0]?.toUpperCase() ?? "O"}</span>}
+                  </span>
                   {adminAlertCount > 0 && (
                     <span className="admin-alert-badge">
                       {adminAlertCount > 9 ? "9+" : adminAlertCount}
@@ -619,9 +615,12 @@ export default function ChannelSidebar({ channels, currentUser, dmPartners, dmTh
     <>
       <aside className="sidebar">
         <div className="sidebar-header">
-          {/* MultiTracks branding — persists across the app. Click to collapse. */}
-          <button className="sidebar-brand-btn" onClick={onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
-            <img src="/multitracks-logo.png" alt="MultiTracks" className="sidebar-brand-logo" />
+          {/* MultiTracks branding — persists across the app. */}
+          <img src="/multitracks-logo.png" alt="MultiTracks" className="sidebar-brand-logo" />
+          <button className="sidebar-collapse-btn" onClick={onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
         </div>
 

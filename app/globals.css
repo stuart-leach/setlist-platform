@@ -3562,6 +3562,20 @@ html, body {
   color: #ff453a;
 }
 
+/* Org logo used as the collapsed Admin entry */
+.mini-org-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+}
+.mini-org-logo img { width: 100%; height: 100%; object-fit: cover; }
+.mini-org-logo-fallback { font-size: 12px; font-weight: 700; color: #fff; }
+
 /* Admin item in mini (collapsed) sidebar */
 .mini-nav-item--admin {
   color: rgba(255, 69, 58, 0.65) !important;
